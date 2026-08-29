@@ -1,0 +1,74 @@
+{
+    "title": "Козметични услуги",
+    "background": "background.jpg",
+    "font": {
+      "family": "MarckScript, Georgia, serif",
+      "file": null
+    },
+    "layout": {
+      "startX": 169,
+      "startY": 180,
+      "titleFontSize": 42,
+      "subtitleFontSize": 28,
+      "serviceFontSize": 22,
+      "priceFontSize": 22,
+      "lineHeight": 32,
+      "sectionGap": 36,
+      "itemGap": 12,
+      "titleGap": 50,
+      "leftColumnWidth": 380,
+      "middleColumnWidth": 180,
+      "rightColumnWidth": 260,
+      "titleColor": "#2c1810",
+      "subtitleColor": "#5c3d2e",
+      "serviceColor": "#3d2817",
+      "priceColor": "#3d2817"
+    },
+    "sections": [
+      {
+        "subtitle": "Козметични терапии",
+        "items": [
+          {
+            "service": "24к златна терапия",
+            "prices": [
+              { "duration": "60 мин", "price": "35€" }
+            ]
+          },
+          {
+            "service": "Процедура за лице с кислород",
+            "prices": [{ "duration": "60 мин", "price": "35€" }]
+          },
+          {
+            "service": "Неинвазивна карбокситерапия",
+            "prices": [
+              { "duration": "60 мин", "price": "40€" }
+            ]
+          },
+          {
+            "service": "Терапия за проблемна кожа",
+            "prices": [
+              { "duration": "60 мин", "price": "30€" }
+            ]
+          },
+          {
+            "service": "Слънцезащитна терапия",
+            "prices": [
+              { "duration": "40 мин", "price": "30€" }
+            ]
+          }
+        ]
+      },
+      {
+        "subtitle": "Почистване на кожата",
+        "items": [
+          {
+            "service": "Почистване на кожата с ултразвукова шпатула",
+            "prices": [
+              { "duration": "30 мин", "price": "25€" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+  

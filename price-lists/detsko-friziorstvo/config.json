@@ -1,0 +1,54 @@
+{
+    "title": "Детско Фризьорство",
+    "background": "background.jpg",
+    "font": {
+      "family": "MarckScript, Georgia, serif",
+      "file": null
+    },
+    "layout": {
+      "startX": 164,
+      "startY": 187,
+      "titleFontSize": 42,
+      "subtitleFontSize": 28,
+      "serviceFontSize": 22,
+      "priceFontSize": 22,
+      "lineHeight": 25,
+      "sectionGap": 36,
+      "itemGap": 12,
+      "titleGap": 50,
+      "leftColumnWidth": 380,
+      "middleColumnWidth": 180,
+      "rightColumnWidth": 260,
+      "titleColor": "#2c1810",
+      "subtitleColor": "#5c3d2e",
+      "serviceColor": "#3d2817",
+      "priceColor": "#3d2817"
+    },
+    "sections": [
+      {
+        "subtitle": "Подстригване на момиче",
+        "items": [
+          {
+            "service": "Детско подстригване",
+            "prices": [
+              { "duration": "20 мин", "price": "10€" },
+              { "duration": "30 мин", "price": "15€" }
+            ]
+          }
+        ]
+      },
+      {
+        "subtitle": "Подстригване на момче",
+        "items": [
+          {
+            "service": "Детско подстригване",
+            "prices": [
+              { "duration": "20 мин", "price": "10€" },
+              { "duration": "30 мин", "price": "15€" }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+  

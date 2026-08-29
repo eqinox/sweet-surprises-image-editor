@@ -1,0 +1,7 @@
+{
+  "name": "sweet-surprises-image-editor",
+  "private": true,
+  "scripts": {
+    "start": "npx serve . -p 8080"
+  }
+}

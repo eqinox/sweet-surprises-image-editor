@@ -1,0 +1,138 @@
+{
+  "title": "Фризьорство",
+  "background": "background.jpg",
+  "font": {
+    "family": "MarckScript, Georgia, serif",
+    "file": null
+  },
+  "layout": {
+    "startX": 166,
+    "startY": 185,
+    "titleFontSize": 42,
+    "subtitleFontSize": 28,
+    "serviceFontSize": 22,
+    "priceFontSize": 22,
+    "lineHeight": 18,
+    "sectionGap": 36,
+    "itemGap": 12,
+    "titleGap": 50,
+    "leftColumnWidth": 380,
+    "middleColumnWidth": 180,
+    "rightColumnWidth": 260,
+    "titleColor": "#2c1810",
+    "subtitleColor": "#5c3d2e",
+    "serviceColor": "#3d2817",
+    "priceColor": "#3d2817"
+  },
+  "sections": [
+    {
+      "subtitle": "",
+      "items": [
+        {
+          "service": "Сешоар",
+          "prices": [
+            { "duration": "30 мин", "price": "20€" },
+            { "duration": "60 мин", "price": "30€" }
+          ]
+        },
+        {
+          "service": "Подстригване на средна коса със стайлинг и сешоар",
+          "prices": [{ "duration": "45 мин", "price": "25€" }]
+        },
+        {
+          "service": "Подстригване на дълга коса, стайлинг, сешоар",
+          "prices": [
+            { "duration": "60 мин", "price": "35€" },
+            { "duration": "90 мин", "price": "40€" }
+          ]
+        }
+      ]
+    },
+    {
+      "subtitle": "Боядисване на коса (без подстригване)",
+      "items": [
+        {
+          "service": "Боядисване на цяла коса",
+          "prices": [
+            { "duration": "60 мин", "price": "30€" },
+            { "duration": "90 мин", "price": "50€" }
+          ]
+        },
+        {
+          "service": "Боядисване на цялата коса със сешоар при използване на боя на клиента",
+          "prices": [
+            { "duration": "45 мин", "price": "15€" },
+            { "duration": "90 мин", "price": "25€" }
+          ]
+        }
+      ]
+    },
+    {
+      "subtitle": "Дамско подстригване",
+      "items": [
+        {
+          "service": "Подстригване на средна коса със стайлинг и сешоар",
+          "prices": [{ "duration": "45 мин", "price": "25€" }]
+        },
+        {
+          "service": "Подстригване на дълга коса, стайлинг, сешоар",
+          "prices": [
+            { "duration": "60 мин", "price": "35€" },
+            { "duration": "90 мин", "price": "40€" }
+          ]
+        }
+      ]
+    },
+    {
+      "subtitle": "Мъжко подстригване",
+      "items": [
+        {
+          "service": "Мъжко подстригване",
+          "prices": [
+            { "duration": "15 мин", "price": "10€" },
+            { "duration": "30 мин", "price": "15€" }
+          ]
+        }
+      ]
+    },
+    {
+      "subtitle": "Детско подстригване",
+      "items": [
+        {
+          "service": "Подстригване на момиче",
+          "prices": [
+            { "duration": "20 мин", "price": "10€" },
+            { "duration": "30 мин", "price": "15€" }
+          ]
+        },
+        {
+          "service": "Подстригване на момче",
+          "prices": [
+            { "duration": "20 мин", "price": "10€" },
+            { "duration": "30 мин", "price": "15€" }
+          ]
+        }
+      ]
+    },
+    {
+      "subtitle": "Стайлинг",
+      "items": [
+        {
+          "service": "Подстригване на къса коса със стайлинг и сешоар",
+          "prices": [{ "duration": "45 мин", "price": "15€" }]
+        },
+        {
+          "service": "Подстригване на средна коса със стайлинг и сешоар",
+          "prices": [{ "duration": "45 мин", "price": "25€" }]
+        },
+        {
+          "service": "Подстригване на дълга коса, стайлинг, сешоар",
+          "prices": [
+            { "duration": "60 мин", "price": "35€" },
+            { "duration": "90 мин", "price": "40€" }
+          ]
+        }
+      ]
+    }
+  ]
+}

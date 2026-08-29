@@ -1,0 +1,32 @@
+{
+  "lists": [
+    {
+      "id": "friziorsstvo",
+      "name": "Фризьорство"
+    },
+    {
+      "id": "kozmetichni-uslugi",
+      "name": "Козметични услуги"
+    },
+    {
+      "id": "estetichni-proceduri",
+      "name": "Естетични процедури"
+    },
+    {
+      "id": "detsko-friziorstvo",
+      "name": "Детско Фризьорство"
+    },
+    {
+      "id": "masaji-fizioterapiq",
+      "name": "Масажи и физиотерапия"
+    },
+    {
+      "id": "manikur-pedikur",
+      "name": "Маникюр и педикюр"
+    },
+    {
+      "id": "solarium",
+      "name": "Солариум"
+    }
+  ]
+}
