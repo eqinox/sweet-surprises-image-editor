@@ -1,0 +1,9 @@
+{
+  "name": "Ценоразпис — Sweet Surprises",
+  "short_name": "Ценоразпис",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f4ebe3",
+  "theme_color": "#f4ebe3",
+  "lang": "bg"
+}

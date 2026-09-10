@@ -1,107 +1,18 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="bg">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Ценоразпис — Sweet Surprises</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-  <div class="app">
-    <aside class="sidebar">
-      <h1>Ценоразпис</h1>
-
-      <label class="field">
-        <span>Ценоразпис</span>
-        <select id="listSelect"></select>
-      </label>
-
-      <div class="divider"></div>
-      <h2>Фонова снимка</h2>
-      <p class="hint">По подразбиране се зарежда <code>images/шаблон.jpg</code>. Можеш да избереш друга снимка от компютъра.</p>
-
-      <label class="field">
-        <span>Зареди друга снимка</span>
-        <input type="file" id="backgroundInput" accept="image/jpeg,image/png,image/webp,image/gif">
-      </label>
-      <p class="image-name" id="backgroundName">—</p>
-      <button type="button" id="resetBackgroundBtn" class="secondary">Върни снимката по подразбиране</button>
-
-      <div class="divider"></div>
-      <h2>Настройки (override)</h2>
-      <p class="hint">Промените тук са за преглед. „Запази layout“ ги записва в <code>config.json</code> на избрания ценоразпис.</p>
-
-      <label class="field">
-        <span>Начало X</span>
-        <input type="number" id="startX" min="0" step="1">
-      </label>
-      <label class="field">
-        <span>Начало Y</span>
-        <input type="number" id="startY" min="0" step="1">
-      </label>
-      <label class="field">
-        <span>Ширина лява колона</span>
-        <input type="number" id="leftWidth" min="100" step="10">
-      </label>
-      <label class="field">
-        <span>Ширина дясна колона</span>
-        <input type="number" id="rightWidth" min="80" step="10">
-      </label>
-      <label class="field">
-        <span>Размер заглавие</span>
-        <input type="number" id="titleSize" min="12" step="1">
-      </label>
-      <label class="field">
-        <span>Размер подзаглавие</span>
-        <input type="number" id="subtitleSize" min="10" step="1">
-      </label>
-      <label class="field">
-        <span>Размер услуга / цена</span>
-        <input type="number" id="serviceSize" min="10" step="1">
-      </label>
-      <label class="field">
-        <span>Междуредие</span>
-        <input type="number" id="lineHeight" min="16" step="1">
-      </label>
-      <label class="field">
-        <span>Шрифт (име / fallback)</span>
-        <input type="text" id="fontFamily" placeholder="Georgia, serif">
-      </label>
-
-      <div class="divider"></div>
-      <h2>Custom шрифт</h2>
-      <p class="hint">По подразбиране се зарежда <code>fonts/MarckScript-Regular.ttf</code>. Можеш да качиш друг шрифт от компютъра или да сложиш файл в папката на ценоразписа.</p>
-
-      <label class="field">
-        <span>Зареди шрифт</span>
-        <input type="file" id="fontInput" accept=".ttf,.otf,.woff,.woff2,font/ttf,font/otf,font/woff,font/woff2">
-      </label>
-      <p class="image-name" id="fontName">—</p>
-      <button type="button" id="resetFontBtn" class="secondary">Върни шрифта от config / папката</button>
-
-      <label class="field">
-        <span>Цвят текст</span>
-        <input type="color" id="textColor">
-      </label>
-
-      <div class="actions">
-        <button type="button" id="reloadBtn">Презареди</button>
-        <button type="button" id="saveLayoutBtn" class="save">Запази layout в config.json</button>
-        <button type="button" id="exportBtn" class="primary">Експорт PNG</button>
-      </div>
-    </aside>
-
-    <main class="preview">
-      <div class="preview-toolbar">
-        <span id="statusText">Зареждане...</span>
-        <span id="canvasSize"></span>
-      </div>
-      <div class="canvas-wrap">
-        <canvas id="canvas"></canvas>
-      </div>
-    </main>
-  </div>
-
-  <script src="app.js"></script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f4ebe3" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Ценоразпис" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <title>Ценоразпис — Sweet Surprises</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
