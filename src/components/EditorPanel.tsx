@@ -60,6 +60,7 @@ type EditorPanelProps = {
   onPickFont: (file: File) => void
   onResetFont: () => void
   onReloadOriginal: () => void
+  onCreateNew: () => void
 }
 
 type DialogMode =
@@ -96,6 +97,7 @@ export function EditorPanel({
   onPickFont,
   onResetFont,
   onReloadOriginal,
+  onCreateNew,
 }: EditorPanelProps) {
   const backgroundInputRef = useRef<HTMLInputElement>(null)
   const fontInputRef = useRef<HTMLInputElement>(null)
@@ -195,6 +197,15 @@ export function EditorPanel({
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          <Button
+            type="button"
+            className="h-14 w-full text-lg font-semibold"
+            onClick={onCreateNew}
+            variant="default"
+          >
+            <PlusIcon className="size-6" />
+            Създай ново
+          </Button>
           <Button
             type="button"
             className="h-12 w-full text-base"

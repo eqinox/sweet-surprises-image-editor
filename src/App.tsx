@@ -3,7 +3,7 @@ import { DownloadIcon, Maximize2Icon, SparklesIcon } from "lucide-react"
 import { toast } from "sonner"
 import { EditorPanel } from "@/components/EditorPanel"
 import { FullscreenStage } from "@/components/FullscreenStage"
-import { PriceListCanvas } from "@/components/PriceListCanvas"
+import { InteractivePriceListCanvas } from "@/components/InteractivePriceListCanvas"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -282,6 +282,25 @@ export function App() {
     }
   }
 
+  const handleCreateNew = async () => {
+    try {
+      const placeholder = await createPlaceholderBackground()
+      setBackground(placeholder)
+      setBackgroundLabel("Нова празна снимка — избери фон")
+      
+      const blankConfig = normalizeConfig({
+        title: "",
+        sections: [],
+      })
+      
+      setConfig(blankConfig)
+      setStatus("Нова празна снимка — добави текст")
+      toast.success("Създадена е нова празна снимка!")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Грешка при създаване")
+    }
+  }
+
   return (
     <div className="min-h-dvh bg-background text-foreground">
       <div className="mx-auto grid min-h-dvh max-w-7xl lg:h-dvh lg:grid-cols-[minmax(22rem,26rem)_1fr] lg:overflow-hidden">
@@ -345,6 +364,7 @@ export function App() {
                 onReloadOriginal={() => {
                   if (listId) void loadPriceList(listId, true)
                 }}
+                onCreateNew={() => void handleCreateNew()}
               />
             ) : (
               <p className="text-muted-foreground">{status}</p>
@@ -360,11 +380,12 @@ export function App() {
 
           <div className="flex min-h-0 flex-1 items-center justify-center overflow-auto p-3 pb-6 lg:p-4">
             <div className="flex h-full w-full max-w-3xl items-center justify-center rounded-2xl bg-black p-2 sm:p-3">
-              <PriceListCanvas
+              <InteractivePriceListCanvas
                 canvasRef={canvasRef}
                 config={config}
                 background={background}
                 fontFamily={fontFamily}
+                onConfigChange={setConfig}
                 className="mx-auto max-h-full max-w-full object-contain"
               />
             </div>
