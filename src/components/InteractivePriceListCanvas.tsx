@@ -48,6 +48,9 @@ export function InteractivePriceListCanvas({
   const [fontSize, setFontSize] = useState(22)
   const [showFontSlider, setShowFontSlider] = useState(false)
   const [canvasScale, setCanvasScale] = useState(1)
+  const [zoom, setZoom] = useState(1)
+  const [isPinching, setIsPinching] = useState(false)
+  const [lastPinchDistance, setLastPinchDistance] = useState(0)
 
   useEffect(() => {
     const canvas = ref.current
@@ -177,16 +180,37 @@ export function InteractivePriceListCanvas({
     return null
   }
 
+  const getPinchDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX
+    const dy = touch1.clientY - touch2.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
   const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Handle pinch-to-zoom
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      setIsPinching(true)
+      const distance = getPinchDistance(e.touches[0], e.touches[1])
+      setLastPinchDistance(distance)
+      
+      // Cancel any ongoing drag or long press
+      if (longPressTimer) {
+        window.clearTimeout(longPressTimer)
+        setLongPressTimer(null)
+      }
+      return
+    }
+    
     if (e.touches.length !== 1) return
     
     const touch = e.touches[0]
     const pos = getTouchPosition(touch)
-    const element = findElementAtPosition(pos.x, pos.y)
+    const element = findElementAtPosition(pos.x / zoom, pos.y / zoom)
     
     if (element) {
       e.preventDefault()
-      setDragStart(pos)
+      setDragStart({ x: pos.x / zoom, y: pos.y / zoom })
       
       // Start long press timer
       const timer = window.setTimeout(() => {
@@ -206,14 +230,27 @@ export function InteractivePriceListCanvas({
   }
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Handle pinch-to-zoom
+    if (e.touches.length === 2 && isPinching) {
+      e.preventDefault()
+      const distance = getPinchDistance(e.touches[0], e.touches[1])
+      const delta = distance - lastPinchDistance
+      const zoomDelta = delta * 0.01
+      
+      setZoom((prev) => Math.max(0.5, Math.min(3, prev + zoomDelta)))
+      setLastPinchDistance(distance)
+      return
+    }
+    
     if (e.touches.length !== 1) return
     
     const touch = e.touches[0]
     const pos = getTouchPosition(touch)
+    const adjustedPos = { x: pos.x / zoom, y: pos.y / zoom }
     
     if (longPressTimer && dragStart) {
-      const dx = Math.abs(pos.x - dragStart.x)
-      const dy = Math.abs(pos.y - dragStart.y)
+      const dx = Math.abs(adjustedPos.x - dragStart.x) * zoom
+      const dy = Math.abs(adjustedPos.y - dragStart.y) * zoom
       
       // If moved more than 10px, cancel long press and start dragging
       if (dx > 10 || dy > 10) {
@@ -227,14 +264,14 @@ export function InteractivePriceListCanvas({
           // Update element position
           const element = elements.find((el) => el.id === selectedElement)
           if (element && config && onConfigChange) {
-            const newX = element.x + (pos.x - dragStart.x)
-            const newY = element.y + (pos.y - dragStart.y)
+            const newX = element.x + (adjustedPos.x - dragStart.x)
+            const newY = element.y + (adjustedPos.y - dragStart.y)
             
             // Update config based on element type
             updateElementPosition(element, newX, newY)
           }
           
-          setDragStart(pos)
+          setDragStart(adjustedPos)
         }
       }
     } else if (isDragging && selectedElement && dragStart) {
@@ -242,16 +279,21 @@ export function InteractivePriceListCanvas({
       
       const element = elements.find((el) => el.id === selectedElement)
       if (element && config && onConfigChange) {
-        const newX = element.x + (pos.x - dragStart.x)
-        const newY = element.y + (pos.y - dragStart.y)
+        const newX = element.x + (adjustedPos.x - dragStart.x)
+        const newY = element.y + (adjustedPos.y - dragStart.y)
         updateElementPosition(element, newX, newY)
       }
       
-      setDragStart(pos)
+      setDragStart(adjustedPos)
     }
   }
 
   const handleTouchEnd = () => {
+    if (isPinching) {
+      setIsPinching(false)
+      setLastPinchDistance(0)
+    }
+    
     if (longPressTimer) {
       window.clearTimeout(longPressTimer)
       setLongPressTimer(null)
@@ -388,58 +430,136 @@ export function InteractivePriceListCanvas({
     }
   }
 
-  return (
-    <div ref={containerRef} className="relative">
-      <canvas
-        ref={ref}
-        className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none", className)}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-      />
+  const handleOverlayTouchStart = (e: React.TouchEvent, elementId: string) => {
+    if (e.touches.length !== 1) return
+    
+    e.stopPropagation()
+    const touch = e.touches[0]
+    const pos = getTouchPosition(touch)
+    const element = elements.find((el) => el.id === elementId)
+    
+    if (element) {
+      setDragStart({ x: pos.x / zoom, y: pos.y / zoom })
+      setIsDragging(true)
       
-      {/* Visual feedback overlay */}
-      {selectedElement && (
-        <div className="absolute inset-0 pointer-events-none">
-          {elements.map((el) => {
-            if (el.id !== selectedElement) return null
-            
-            const canvas = ref.current
-            if (!canvas) return null
-            
-            const rect = canvas.getBoundingClientRect()
-            const scale = rect.width / canvas.width
-            
-            const elementType = el.type === "title" ? "Заглавие" :
-                               el.type === "subtitle" ? "Подзаглавие" :
-                               el.type === "service" ? "Услуга" : "Цена"
-            
-            return (
-              <div
-                key={el.id}
-                className={cn(
-                  "absolute border-2 rounded transition-all animate-pulse",
-                  isDragging ? "border-green-500 bg-green-500/20 shadow-lg" : "border-blue-500 bg-blue-500/10"
-                )}
-                style={{
-                  left: `${el.x * scale}px`,
-                  top: `${el.y * scale}px`,
-                  width: `${el.width * scale}px`,
-                  height: `${el.height * scale}px`,
-                }}
-              >
-                <div className={cn(
-                  "absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-full whitespace-nowrap pointer-events-none shadow-lg",
-                  isDragging ? "bg-green-600" : "bg-blue-600"
-                )}>
-                  <GripVerticalIcon className="size-3.5 animate-pulse" />
-                  {isDragging ? `Местиш ${elementType}` : `${elementType} - Плъзни`}
-                </div>
-              </div>
-            )
-          })}
+      // Haptic feedback
+      if (navigator.vibrate) {
+        navigator.vibrate(30)
+      }
+    }
+  }
+
+  const handleOverlayTouchMove = (e: React.TouchEvent, elementId: string) => {
+    if (e.touches.length !== 1 || !isDragging) return
+    
+    e.stopPropagation()
+    e.preventDefault()
+    
+    const touch = e.touches[0]
+    const pos = getTouchPosition(touch)
+    const adjustedPos = { x: pos.x / zoom, y: pos.y / zoom }
+    
+    const element = elements.find((el) => el.id === elementId)
+    if (element && config && onConfigChange && dragStart) {
+      const newX = element.x + (adjustedPos.x - dragStart.x)
+      const newY = element.y + (adjustedPos.y - dragStart.y)
+      updateElementPosition(element, newX, newY)
+      setDragStart(adjustedPos)
+    }
+  }
+
+  const handleOverlayTouchEnd = () => {
+    setIsDragging(false)
+    setDragStart(null)
+  }
+
+  return (
+    <div ref={containerRef} className="relative overflow-hidden">
+      {/* Zoom controls */}
+      <div className="absolute top-4 right-4 z-40 flex flex-col gap-2">
+        <button
+          type="button"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors"
+          onClick={() => setZoom((prev) => Math.min(3, prev + 0.2))}
+        >
+          +
+        </button>
+        <div className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border text-xs font-semibold text-center">
+          {Math.round(zoom * 100)}%
         </div>
-      )}
+        <button
+          type="button"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors"
+          onClick={() => setZoom((prev) => Math.max(0.5, prev - 0.2))}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xs font-semibold hover:bg-background transition-colors"
+          onClick={() => setZoom(1)}
+        >
+          Reset
+        </button>
+      </div>
+
+      <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}>
+        <canvas
+          ref={ref}
+          className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none", className)}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+        />
+      
+        {/* Visual feedback overlay */}
+        {selectedElement && (
+          <div className="absolute inset-0 pointer-events-none">
+            {elements.map((el) => {
+              if (el.id !== selectedElement) return null
+              
+              const canvas = ref.current
+              if (!canvas) return null
+              
+              const rect = canvas.getBoundingClientRect()
+              const scale = rect.width / canvas.width
+              
+              const elementType = el.type === "title" ? "Заглавие" :
+                                 el.type === "subtitle" ? "Подзаглавие" :
+                                 el.type === "service" ? "Услуга" : "Цена"
+              
+              return (
+                <div
+                  key={el.id}
+                  className={cn(
+                    "absolute border-2 rounded transition-all animate-pulse pointer-events-none",
+                    isDragging ? "border-green-500 bg-green-500/20 shadow-lg" : "border-blue-500 bg-blue-500/10"
+                  )}
+                  style={{
+                    left: `${el.x * scale}px`,
+                    top: `${el.y * scale}px`,
+                    width: `${el.width * scale}px`,
+                    height: `${el.height * scale}px`,
+                  }}
+                >
+                  <div 
+                    className={cn(
+                      "absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-full whitespace-nowrap shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto",
+                      isDragging ? "bg-green-600" : "bg-blue-600"
+                    )}
+                    onTouchStart={(e) => handleOverlayTouchStart(e, el.id)}
+                    onTouchMove={(e) => handleOverlayTouchMove(e, el.id)}
+                    onTouchEnd={handleOverlayTouchEnd}
+                  >
+                    <GripVerticalIcon className="size-3.5 animate-pulse" />
+                    {isDragging ? `Местиш ${elementType}` : `${elementType} - Плъзни`}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
       
       {/* Font size slider */}
       {showFontSlider && selectedElement && (
