@@ -51,6 +51,10 @@ export function InteractivePriceListCanvas({
   const [zoom, setZoom] = useState(1)
   const [isPinching, setIsPinching] = useState(false)
   const [lastPinchDistance, setLastPinchDistance] = useState(0)
+  const [isPanning, setIsPanning] = useState(false)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [lastTap, setLastTap] = useState(0)
+  const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     const canvas = ref.current
@@ -199,6 +203,7 @@ export function InteractivePriceListCanvas({
         window.clearTimeout(longPressTimer)
         setLongPressTimer(null)
       }
+      setIsPanning(false)
       return
     }
     
@@ -206,24 +211,58 @@ export function InteractivePriceListCanvas({
     
     const touch = e.touches[0]
     const pos = getTouchPosition(touch)
-    const element = findElementAtPosition(pos.x / zoom, pos.y / zoom)
     
-    if (element) {
+    // Check for double tap
+    const now = Date.now()
+    const timeSinceLastTap = now - lastTap
+    
+    if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+      // Double tap detected
       e.preventDefault()
-      setDragStart({ x: pos.x / zoom, y: pos.y / zoom })
+      const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
       
-      // Start long press timer
-      const timer = window.setTimeout(() => {
+      if (element) {
         setSelectedElement(element.id)
         setFontSize(element.fontSize)
-        setShowFontSlider(true)
+        setShowFontSlider(false)
         setIsDragging(false)
         
-        // Haptic feedback if available
+        // Haptic feedback
+        if (navigator.vibrate) {
+          navigator.vibrate([30, 50, 30])
+        }
+      }
+      setLastTap(0)
+      return
+    }
+    
+    setLastTap(now)
+    
+    // If element is already selected, prepare for dragging
+    if (selectedElement) {
+      const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
+      if (element && element.id === selectedElement) {
+        e.preventDefault()
+        setDragStart({ x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom })
+        return
+      }
+    }
+    
+    // Otherwise, prepare for panning
+    setPanStart({ x: pos.x, y: pos.y })
+    
+    // Start long press timer for font size slider
+    const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
+    if (element) {
+      const timer = window.setTimeout(() => {
+        setFontSize(element.fontSize)
+        setShowFontSlider(true)
+        
+        // Haptic feedback
         if (navigator.vibrate) {
           navigator.vibrate(50)
         }
-      }, 500) // 500ms long press
+      }, 800) // 800ms long press for font slider
       
       setLongPressTimer(timer)
     }
@@ -246,37 +285,23 @@ export function InteractivePriceListCanvas({
     
     const touch = e.touches[0]
     const pos = getTouchPosition(touch)
-    const adjustedPos = { x: pos.x / zoom, y: pos.y / zoom }
     
-    if (longPressTimer && dragStart) {
-      const dx = Math.abs(adjustedPos.x - dragStart.x) * zoom
-      const dy = Math.abs(adjustedPos.y - dragStart.y) * zoom
+    // Cancel long press if moved
+    if (longPressTimer && panStart) {
+      const dx = Math.abs(pos.x - panStart.x)
+      const dy = Math.abs(pos.y - panStart.y)
       
-      // If moved more than 10px, cancel long press and start dragging
       if (dx > 10 || dy > 10) {
         window.clearTimeout(longPressTimer)
         setLongPressTimer(null)
-        
-        if (selectedElement) {
-          e.preventDefault()
-          setIsDragging(true)
-          
-          // Update element position
-          const element = elements.find((el) => el.id === selectedElement)
-          if (element && config && onConfigChange) {
-            const newX = element.x + (adjustedPos.x - dragStart.x)
-            const newY = element.y + (adjustedPos.y - dragStart.y)
-            
-            // Update config based on element type
-            updateElementPosition(element, newX, newY)
-          }
-          
-          setDragStart(adjustedPos)
-        }
       }
-    } else if (isDragging && selectedElement && dragStart) {
+    }
+    
+    // Handle element dragging if element is selected
+    if (isDragging && selectedElement && dragStart) {
       e.preventDefault()
       
+      const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
       const element = elements.find((el) => el.id === selectedElement)
       if (element && config && onConfigChange) {
         const newX = element.x + (adjustedPos.x - dragStart.x)
@@ -285,6 +310,36 @@ export function InteractivePriceListCanvas({
       }
       
       setDragStart(adjustedPos)
+      return
+    }
+    
+    // Handle element dragging when starting from selected state
+    if (selectedElement && dragStart && !isDragging) {
+      const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
+      const dx = Math.abs(adjustedPos.x - dragStart.x) * zoom
+      const dy = Math.abs(adjustedPos.y - dragStart.y) * zoom
+      
+      if (dx > 10 || dy > 10) {
+        e.preventDefault()
+        setIsDragging(true)
+        return
+      }
+    }
+    
+    // Handle panning
+    if (panStart && !selectedElement && !isDragging) {
+      e.preventDefault()
+      setIsPanning(true)
+      
+      const dx = pos.x - panStart.x
+      const dy = pos.y - panStart.y
+      
+      setPanOffset((prev) => ({
+        x: prev.x + dx,
+        y: prev.y + dy,
+      }))
+      
+      setPanStart({ x: pos.x, y: pos.y })
     }
   }
 
@@ -292,6 +347,10 @@ export function InteractivePriceListCanvas({
     if (isPinching) {
       setIsPinching(false)
       setLastPinchDistance(0)
+    }
+    
+    if (isPanning) {
+      setIsPanning(false)
     }
     
     if (longPressTimer) {
@@ -303,6 +362,8 @@ export function InteractivePriceListCanvas({
       setIsDragging(false)
       setDragStart(null)
     }
+    
+    setPanStart(null)
   }
 
   const updateElementPosition = (element: DraggableElement, newX: number, newY: number) => {
@@ -439,7 +500,7 @@ export function InteractivePriceListCanvas({
     const element = elements.find((el) => el.id === elementId)
     
     if (element) {
-      setDragStart({ x: pos.x / zoom, y: pos.y / zoom })
+      setDragStart({ x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom })
       setIsDragging(true)
       
       // Haptic feedback
@@ -457,7 +518,7 @@ export function InteractivePriceListCanvas({
     
     const touch = e.touches[0]
     const pos = getTouchPosition(touch)
-    const adjustedPos = { x: pos.x / zoom, y: pos.y / zoom }
+    const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
     
     const element = elements.find((el) => el.id === elementId)
     if (element && config && onConfigChange && dragStart) {
@@ -479,7 +540,7 @@ export function InteractivePriceListCanvas({
       <div className="absolute top-4 right-4 z-40 flex flex-col gap-2">
         <button
           type="button"
-          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors active:scale-95"
           onClick={() => setZoom((prev) => Math.min(3, prev + 0.2))}
         >
           +
@@ -489,21 +550,44 @@ export function InteractivePriceListCanvas({
         </div>
         <button
           type="button"
-          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors active:scale-95"
           onClick={() => setZoom((prev) => Math.max(0.5, prev - 0.2))}
         >
           −
         </button>
         <button
           type="button"
-          className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xs font-semibold hover:bg-background transition-colors"
-          onClick={() => setZoom(1)}
+          className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xs font-semibold hover:bg-background transition-colors active:scale-95"
+          onClick={() => {
+            setZoom(1)
+            setPanOffset({ x: 0, y: 0 })
+          }}
         >
           Reset
         </button>
       </div>
 
-      <div style={{ transform: `scale(${zoom})`, transformOrigin: 'center center' }}>
+      {/* Panning indicator */}
+      {isPanning && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg animate-pulse">
+          🤚 Мърдаш картината
+        </div>
+      )}
+
+      {/* Instructions overlay when zoomed */}
+      {zoom !== 1 && !selectedElement && !isPanning && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-background/90 backdrop-blur border text-xs font-medium shadow-lg">
+          Плъзни с 1 пръст за мърдане • Тапни 2х за избор
+        </div>
+      )}
+
+      <div 
+        style={{ 
+          transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`, 
+          transformOrigin: 'center center',
+          transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+        }}
+      >
         <canvas
           ref={ref}
           className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none", className)}
