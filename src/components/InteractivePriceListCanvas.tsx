@@ -54,6 +54,7 @@ export function InteractivePriceListCanvas({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [lastTap, setLastTap] = useState(0)
   const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
+  const [debugTapPosition, setDebugTapPosition] = useState<{ x: number; y: number } | null>(null)
 
   // Prevent body scroll when dragging or panning
   useEffect(() => {
@@ -236,6 +237,10 @@ export function InteractivePriceListCanvas({
         const rect = canvas.getBoundingClientRect()
         const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
         const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        // Show debug position
+        setDebugTapPosition({ x: canvasX, y: canvasY })
+        setTimeout(() => setDebugTapPosition(null), 2000)
         
         // Find element at this position
         const element = findElementAtPosition(canvasX, canvasY)
@@ -640,10 +645,33 @@ export function InteractivePriceListCanvas({
         </button>
       </div>
 
+      {/* Debug tap position indicator */}
+      {debugTapPosition && (
+        <div 
+          className="absolute z-50 size-8 rounded-full bg-red-500/70 border-4 border-white shadow-lg pointer-events-none"
+          style={{
+            left: `${debugTapPosition.x}px`,
+            top: `${debugTapPosition.y}px`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600 text-white px-2 py-1 rounded text-xs">
+            Тапнато тук
+          </div>
+        </div>
+      )}
+
       {/* Panning indicator */}
       {isPanning && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg animate-pulse">
           🤚 Мърдаш картината
+        </div>
+      )}
+      
+      {/* Selected element indicator */}
+      {selectedElement && !isDragging && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg">
+          Избран елемент (скролът е БЛОКИРАН)
         </div>
       )}
 
@@ -651,6 +679,36 @@ export function InteractivePriceListCanvas({
       {zoom !== 1 && !selectedElement && !isPanning && (
         <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-background/90 backdrop-blur border text-xs font-medium shadow-lg">
           Плъзни с 1 пръст за мърдане • Тапни 2х за избор
+        </div>
+      )}
+      
+      {/* Debug: Show all element boundaries */}
+      {elements.length > 0 && (
+        <div className="absolute inset-0 pointer-events-none z-30">
+          {elements.map((el) => {
+            const canvas = ref.current
+            if (!canvas) return null
+            
+            const rect = canvas.getBoundingClientRect()
+            const scale = rect.width / canvas.width
+            
+            return (
+              <div
+                key={`debug-${el.id}`}
+                className="absolute border border-yellow-400/30 bg-yellow-400/5"
+                style={{
+                  left: `${el.x * scale}px`,
+                  top: `${el.y * scale}px`,
+                  width: `${el.width * scale}px`,
+                  height: `${el.height * scale}px`,
+                }}
+              >
+                <div className="text-[8px] text-yellow-600 font-mono bg-yellow-100/80 px-1">
+                  {el.type}
+                </div>
+              </div>
+            )
+          })}
         </div>
       )}
 
