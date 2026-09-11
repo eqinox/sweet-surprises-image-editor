@@ -410,12 +410,16 @@ export function InteractivePriceListCanvas({
             const rect = canvas.getBoundingClientRect()
             const scale = rect.width / canvas.width
             
+            const elementType = el.type === "title" ? "Заглавие" :
+                               el.type === "subtitle" ? "Подзаглавие" :
+                               el.type === "service" ? "Услуга" : "Цена"
+            
             return (
               <div
                 key={el.id}
                 className={cn(
-                  "absolute border-2 border-blue-500 bg-blue-500/10 rounded transition-all",
-                  isDragging && "border-green-500 bg-green-500/10"
+                  "absolute border-2 rounded transition-all animate-pulse",
+                  isDragging ? "border-green-500 bg-green-500/20 shadow-lg" : "border-blue-500 bg-blue-500/10"
                 )}
                 style={{
                   left: `${el.x * scale}px`,
@@ -424,9 +428,12 @@ export function InteractivePriceListCanvas({
                   height: `${el.height * scale}px`,
                 }}
               >
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-1 bg-blue-600 text-white text-xs rounded whitespace-nowrap pointer-events-none">
-                  <GripVerticalIcon className="size-3" />
-                  {isDragging ? "Мести се..." : "Задържи за да местиш"}
+                <div className={cn(
+                  "absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-full whitespace-nowrap pointer-events-none shadow-lg",
+                  isDragging ? "bg-green-600" : "bg-blue-600"
+                )}>
+                  <GripVerticalIcon className="size-3.5 animate-pulse" />
+                  {isDragging ? `Местиш ${elementType}` : `${elementType} - Плъзни`}
                 </div>
               </div>
             )
@@ -436,36 +443,50 @@ export function InteractivePriceListCanvas({
       
       {/* Font size slider */}
       {showFontSlider && selectedElement && (
-        <div className="fixed bottom-[80px] left-0 right-0 z-50 bg-background/95 backdrop-blur border-t p-4 shadow-lg animate-in slide-in-from-bottom">
-          <div className="mx-auto max-w-md space-y-3">
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t-2 border-primary/20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom">
+          <div className="mx-auto max-w-md space-y-4">
             <div className="flex items-center justify-between">
-              <Label className="text-base font-medium">Размер на шрифта</Label>
               <div className="flex items-center gap-2">
-                <span className="text-2xl font-semibold text-primary">{fontSize}px</span>
+                <div className="size-10 flex items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-xl">Aa</span>
+                </div>
+                <div>
+                  <Label className="text-base font-semibold">Размер на шрифта</Label>
+                  <p className="text-xs text-muted-foreground">Плъзни за промяна</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-4 py-2 bg-primary/10 rounded-lg">
+                  <span className="text-2xl font-bold text-primary">{fontSize}</span>
+                  <span className="text-sm text-muted-foreground ml-0.5">px</span>
+                </div>
                 <button
                   type="button"
-                  className="px-3 py-1 text-sm bg-destructive/10 text-destructive rounded hover:bg-destructive/20"
+                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
                   onClick={() => {
                     setShowFontSlider(false)
                     setSelectedElement(null)
                     setIsDragging(false)
                   }}
                 >
-                  Готово
+                  ✓ Готово
                 </button>
               </div>
             </div>
-            <Slider
-              value={[fontSize]}
-              onValueChange={handleFontSizeChange}
-              min={10}
-              max={80}
-              step={1}
-              className="w-full"
-            />
-            <div className="flex justify-between text-xs text-muted-foreground">
-              <span>10px (малък)</span>
-              <span>80px (голям)</span>
+            <div className="space-y-2">
+              <Slider
+                value={[fontSize]}
+                onValueChange={handleFontSizeChange}
+                min={10}
+                max={80}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground px-1">
+                <span>10 (малък)</span>
+                <span className="text-primary font-medium">{fontSize}</span>
+                <span>80 (голям)</span>
+              </div>
             </div>
           </div>
         </div>
