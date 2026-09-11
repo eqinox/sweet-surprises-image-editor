@@ -47,7 +47,6 @@ export function InteractivePriceListCanvas({
   const [longPressTimer, setLongPressTimer] = useState<number | null>(null)
   const [fontSize, setFontSize] = useState(22)
   const [showFontSlider, setShowFontSlider] = useState(false)
-  const [canvasScale, setCanvasScale] = useState(1)
   const [zoom, setZoom] = useState(1)
   const [isPinching, setIsPinching] = useState(false)
   const [lastPinchDistance, setLastPinchDistance] = useState(0)
@@ -55,6 +54,25 @@ export function InteractivePriceListCanvas({
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
   const [lastTap, setLastTap] = useState(0)
   const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
+
+  // Prevent body scroll when dragging or panning
+  useEffect(() => {
+    if (isDragging || isPanning || selectedElement) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+    
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+  }, [isDragging, isPanning, selectedElement])
 
   useEffect(() => {
     const canvas = ref.current
@@ -147,20 +165,6 @@ export function InteractivePriceListCanvas({
     setElements(newElements)
   }, [background, config, fontFamily, ref])
 
-  // Calculate canvas scale for touch coordinate mapping
-  useEffect(() => {
-    const canvas = ref.current
-    if (!canvas) return
-    
-    const updateScale = () => {
-      const rect = canvas.getBoundingClientRect()
-      setCanvasScale(canvas.width / rect.width)
-    }
-    
-    updateScale()
-    window.addEventListener("resize", updateScale)
-    return () => window.removeEventListener("resize", updateScale)
-  }, [ref, background])
 
   const getTouchPosition = (touch: React.Touch) => {
     const canvas = ref.current
@@ -173,20 +177,16 @@ export function InteractivePriceListCanvas({
       y: (touch.clientY - rect.top),
     }
   }
-  
-  const getTouchPositionInCanvas = (touch: React.Touch) => {
-    const pos = getTouchPosition(touch)
-    return {
-      x: (pos.x - panOffset.x) / zoom,
-      y: (pos.y - panOffset.y) / zoom,
-    }
-  }
 
   const findElementAtPosition = (x: number, y: number): DraggableElement | null => {
     // Check in reverse order so top elements are selected first
     for (let i = elements.length - 1; i >= 0; i--) {
       const el = elements[i]
-      if (x >= el.x && x <= el.x + el.width && y >= el.y && y <= el.y + el.height) {
+      
+      // Add some tolerance for touch targets (easier to tap)
+      const padding = 5
+      if (x >= el.x - padding && x <= el.x + el.width + padding && 
+          y >= el.y - padding && y <= el.y + el.height + padding) {
         return el
       }
     }
@@ -220,7 +220,6 @@ export function InteractivePriceListCanvas({
     
     const touch = e.touches[0]
     const screenPos = getTouchPosition(touch)
-    const canvasPos = getTouchPositionInCanvas(touch)
     
     // Check for double tap
     const now = Date.now()
@@ -229,19 +228,32 @@ export function InteractivePriceListCanvas({
     if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
       // Double tap detected
       e.preventDefault()
+      e.stopPropagation()
       
-      // Use canvas coordinates for element detection
-      const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
-      
-      if (element) {
-        setSelectedElement(element.id)
-        setFontSize(element.fontSize)
-        setShowFontSlider(false)
-        setIsDragging(false)
+      // Get the canvas element's actual displayed position
+      const canvas = ref.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
         
-        // Haptic feedback
-        if (navigator.vibrate) {
-          navigator.vibrate([30, 50, 30])
+        // Find element at this position
+        const element = findElementAtPosition(canvasX, canvasY)
+        
+        if (element) {
+          setSelectedElement(element.id)
+          setFontSize(element.fontSize)
+          setShowFontSlider(false)
+          setIsDragging(false)
+          
+          // Haptic feedback
+          if (navigator.vibrate) {
+            navigator.vibrate([30, 50, 30])
+          }
+        } else {
+          // If no element found, deselect
+          setSelectedElement(null)
+          setShowFontSlider(false)
         }
       }
       setLastTap(0)
@@ -252,11 +264,18 @@ export function InteractivePriceListCanvas({
     
     // If element is already selected, prepare for dragging
     if (selectedElement) {
-      const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
-      if (element && element.id === selectedElement) {
-        e.preventDefault()
-        setDragStart({ x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale })
-        return
+      const canvas = ref.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        const element = findElementAtPosition(canvasX, canvasY)
+        
+        if (element && element.id === selectedElement) {
+          e.preventDefault()
+          setDragStart({ x: canvasX, y: canvasY })
+          return
+        }
       }
     }
     
@@ -264,19 +283,26 @@ export function InteractivePriceListCanvas({
     setPanStart(screenPos)
     
     // Start long press timer for font size slider
-    const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
-    if (element) {
-      const timer = window.setTimeout(() => {
-        setFontSize(element.fontSize)
-        setShowFontSlider(true)
-        
-        // Haptic feedback
-        if (navigator.vibrate) {
-          navigator.vibrate(50)
-        }
-      }, 800) // 800ms long press for font slider
+    const canvas = ref.current
+    if (canvas) {
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+      const element = findElementAtPosition(canvasX, canvasY)
       
-      setLongPressTimer(timer)
+      if (element) {
+        const timer = window.setTimeout(() => {
+          setFontSize(element.fontSize)
+          setShowFontSlider(true)
+          
+          // Haptic feedback
+          if (navigator.vibrate) {
+            navigator.vibrate(50)
+          }
+        }, 800) // 800ms long press for font slider
+        
+        setLongPressTimer(timer)
+      }
     }
   }
 
@@ -297,7 +323,6 @@ export function InteractivePriceListCanvas({
     
     const touch = e.touches[0]
     const screenPos = getTouchPosition(touch)
-    const canvasPos = getTouchPositionInCanvas(touch)
     
     // Cancel long press if moved
     if (longPressTimer && panStart) {
@@ -314,28 +339,40 @@ export function InteractivePriceListCanvas({
     if (isDragging && selectedElement && dragStart) {
       e.preventDefault()
       
-      const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
-      const element = elements.find((el) => el.id === selectedElement)
-      if (element && config && onConfigChange) {
-        const newX = element.x + (canvasPosScaled.x - dragStart.x)
-        const newY = element.y + (canvasPosScaled.y - dragStart.y)
-        updateElementPosition(element, newX, newY)
+      const canvas = ref.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        const element = elements.find((el) => el.id === selectedElement)
+        if (element && config && onConfigChange) {
+          const newX = element.x + (canvasX - dragStart.x)
+          const newY = element.y + (canvasY - dragStart.y)
+          updateElementPosition(element, newX, newY)
+        }
+        
+        setDragStart({ x: canvasX, y: canvasY })
       }
-      
-      setDragStart(canvasPosScaled)
       return
     }
     
     // Handle element dragging when starting from selected state
     if (selectedElement && dragStart && !isDragging) {
-      const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
-      const dx = Math.abs(canvasPosScaled.x - dragStart.x)
-      const dy = Math.abs(canvasPosScaled.y - dragStart.y)
-      
-      if (dx > 10 || dy > 10) {
-        e.preventDefault()
-        setIsDragging(true)
-        return
+      const canvas = ref.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        const dx = Math.abs(canvasX - dragStart.x)
+        const dy = Math.abs(canvasY - dragStart.y)
+        
+        if (dx > 10 || dy > 10) {
+          e.preventDefault()
+          setIsDragging(true)
+          return
+        }
       }
     }
     
@@ -508,12 +545,18 @@ export function InteractivePriceListCanvas({
     if (e.touches.length !== 1) return
     
     e.stopPropagation()
+    e.preventDefault()
+    
     const touch = e.touches[0]
-    const canvasPos = getTouchPositionInCanvas(touch)
+    const canvas = ref.current
     const element = elements.find((el) => el.id === elementId)
     
-    if (element) {
-      setDragStart({ x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale })
+    if (element && canvas) {
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+      
+      setDragStart({ x: canvasX, y: canvasY })
       setIsDragging(true)
       
       // Haptic feedback
@@ -530,15 +573,18 @@ export function InteractivePriceListCanvas({
     e.preventDefault()
     
     const touch = e.touches[0]
-    const canvasPos = getTouchPositionInCanvas(touch)
-    const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
-    
+    const canvas = ref.current
     const element = elements.find((el) => el.id === elementId)
-    if (element && config && onConfigChange && dragStart) {
-      const newX = element.x + (canvasPosScaled.x - dragStart.x)
-      const newY = element.y + (canvasPosScaled.y - dragStart.y)
+    
+    if (element && config && onConfigChange && dragStart && canvas) {
+      const rect = canvas.getBoundingClientRect()
+      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
+      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+      
+      const newX = element.x + (canvasX - dragStart.x)
+      const newY = element.y + (canvasY - dragStart.y)
       updateElementPosition(element, newX, newY)
-      setDragStart(canvasPosScaled)
+      setDragStart({ x: canvasX, y: canvasY })
     }
   }
 
@@ -552,9 +598,15 @@ export function InteractivePriceListCanvas({
       ref={containerRef} 
       className="relative overflow-hidden select-none"
       style={{
-        touchAction: isDragging || isPanning ? 'none' : 'auto',
+        touchAction: 'none',
         userSelect: 'none',
         WebkitUserSelect: 'none',
+        overscrollBehavior: 'none',
+      }}
+      onTouchMove={(e) => {
+        if (isDragging || isPanning || selectedElement) {
+          e.preventDefault()
+        }
       }}
     >
       {/* Zoom controls */}
