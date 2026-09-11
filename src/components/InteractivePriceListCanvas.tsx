@@ -164,12 +164,21 @@ export function InteractivePriceListCanvas({
 
   const getTouchPosition = (touch: React.Touch) => {
     const canvas = ref.current
-    if (!canvas) return { x: 0, y: 0 }
+    const container = containerRef.current
+    if (!canvas || !container) return { x: 0, y: 0 }
     
     const rect = canvas.getBoundingClientRect()
     return {
-      x: (touch.clientX - rect.left) * canvasScale,
-      y: (touch.clientY - rect.top) * canvasScale,
+      x: (touch.clientX - rect.left),
+      y: (touch.clientY - rect.top),
+    }
+  }
+  
+  const getTouchPositionInCanvas = (touch: React.Touch) => {
+    const pos = getTouchPosition(touch)
+    return {
+      x: (pos.x - panOffset.x) / zoom,
+      y: (pos.y - panOffset.y) / zoom,
     }
   }
 
@@ -210,7 +219,8 @@ export function InteractivePriceListCanvas({
     if (e.touches.length !== 1) return
     
     const touch = e.touches[0]
-    const pos = getTouchPosition(touch)
+    const screenPos = getTouchPosition(touch)
+    const canvasPos = getTouchPositionInCanvas(touch)
     
     // Check for double tap
     const now = Date.now()
@@ -219,7 +229,9 @@ export function InteractivePriceListCanvas({
     if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
       // Double tap detected
       e.preventDefault()
-      const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
+      
+      // Use canvas coordinates for element detection
+      const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
       
       if (element) {
         setSelectedElement(element.id)
@@ -240,19 +252,19 @@ export function InteractivePriceListCanvas({
     
     // If element is already selected, prepare for dragging
     if (selectedElement) {
-      const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
+      const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
       if (element && element.id === selectedElement) {
         e.preventDefault()
-        setDragStart({ x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom })
+        setDragStart({ x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale })
         return
       }
     }
     
     // Otherwise, prepare for panning
-    setPanStart({ x: pos.x, y: pos.y })
+    setPanStart(screenPos)
     
     // Start long press timer for font size slider
-    const element = findElementAtPosition((pos.x - panOffset.x) / zoom, (pos.y - panOffset.y) / zoom)
+    const element = findElementAtPosition(canvasPos.x * canvasScale, canvasPos.y * canvasScale)
     if (element) {
       const timer = window.setTimeout(() => {
         setFontSize(element.fontSize)
@@ -284,12 +296,13 @@ export function InteractivePriceListCanvas({
     if (e.touches.length !== 1) return
     
     const touch = e.touches[0]
-    const pos = getTouchPosition(touch)
+    const screenPos = getTouchPosition(touch)
+    const canvasPos = getTouchPositionInCanvas(touch)
     
     // Cancel long press if moved
     if (longPressTimer && panStart) {
-      const dx = Math.abs(pos.x - panStart.x)
-      const dy = Math.abs(pos.y - panStart.y)
+      const dx = Math.abs(screenPos.x - panStart.x)
+      const dy = Math.abs(screenPos.y - panStart.y)
       
       if (dx > 10 || dy > 10) {
         window.clearTimeout(longPressTimer)
@@ -301,23 +314,23 @@ export function InteractivePriceListCanvas({
     if (isDragging && selectedElement && dragStart) {
       e.preventDefault()
       
-      const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
+      const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
       const element = elements.find((el) => el.id === selectedElement)
       if (element && config && onConfigChange) {
-        const newX = element.x + (adjustedPos.x - dragStart.x)
-        const newY = element.y + (adjustedPos.y - dragStart.y)
+        const newX = element.x + (canvasPosScaled.x - dragStart.x)
+        const newY = element.y + (canvasPosScaled.y - dragStart.y)
         updateElementPosition(element, newX, newY)
       }
       
-      setDragStart(adjustedPos)
+      setDragStart(canvasPosScaled)
       return
     }
     
     // Handle element dragging when starting from selected state
     if (selectedElement && dragStart && !isDragging) {
-      const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
-      const dx = Math.abs(adjustedPos.x - dragStart.x) * zoom
-      const dy = Math.abs(adjustedPos.y - dragStart.y) * zoom
+      const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
+      const dx = Math.abs(canvasPosScaled.x - dragStart.x)
+      const dy = Math.abs(canvasPosScaled.y - dragStart.y)
       
       if (dx > 10 || dy > 10) {
         e.preventDefault()
@@ -331,15 +344,15 @@ export function InteractivePriceListCanvas({
       e.preventDefault()
       setIsPanning(true)
       
-      const dx = pos.x - panStart.x
-      const dy = pos.y - panStart.y
+      const dx = screenPos.x - panStart.x
+      const dy = screenPos.y - panStart.y
       
       setPanOffset((prev) => ({
         x: prev.x + dx,
         y: prev.y + dy,
       }))
       
-      setPanStart({ x: pos.x, y: pos.y })
+      setPanStart(screenPos)
     }
   }
 
@@ -496,11 +509,11 @@ export function InteractivePriceListCanvas({
     
     e.stopPropagation()
     const touch = e.touches[0]
-    const pos = getTouchPosition(touch)
+    const canvasPos = getTouchPositionInCanvas(touch)
     const element = elements.find((el) => el.id === elementId)
     
     if (element) {
-      setDragStart({ x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom })
+      setDragStart({ x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale })
       setIsDragging(true)
       
       // Haptic feedback
@@ -517,15 +530,15 @@ export function InteractivePriceListCanvas({
     e.preventDefault()
     
     const touch = e.touches[0]
-    const pos = getTouchPosition(touch)
-    const adjustedPos = { x: (pos.x - panOffset.x) / zoom, y: (pos.y - panOffset.y) / zoom }
+    const canvasPos = getTouchPositionInCanvas(touch)
+    const canvasPosScaled = { x: canvasPos.x * canvasScale, y: canvasPos.y * canvasScale }
     
     const element = elements.find((el) => el.id === elementId)
     if (element && config && onConfigChange && dragStart) {
-      const newX = element.x + (adjustedPos.x - dragStart.x)
-      const newY = element.y + (adjustedPos.y - dragStart.y)
+      const newX = element.x + (canvasPosScaled.x - dragStart.x)
+      const newY = element.y + (canvasPosScaled.y - dragStart.y)
       updateElementPosition(element, newX, newY)
-      setDragStart(adjustedPos)
+      setDragStart(canvasPosScaled)
     }
   }
 
@@ -535,7 +548,15 @@ export function InteractivePriceListCanvas({
   }
 
   return (
-    <div ref={containerRef} className="relative overflow-hidden">
+    <div 
+      ref={containerRef} 
+      className="relative overflow-hidden select-none"
+      style={{
+        touchAction: isDragging || isPanning ? 'none' : 'auto',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+      }}
+    >
       {/* Zoom controls */}
       <div className="absolute top-4 right-4 z-40 flex flex-col gap-2">
         <button
@@ -585,15 +606,23 @@ export function InteractivePriceListCanvas({
         style={{ 
           transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`, 
           transformOrigin: 'center center',
-          transition: isPanning ? 'none' : 'transform 0.1s ease-out'
+          transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
         }}
       >
         <canvas
           ref={ref}
-          className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none", className)}
+          className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none select-none", className)}
           onTouchStart={handleTouchStart}
           onTouchMove={handleTouchMove}
           onTouchEnd={handleTouchEnd}
+          style={{
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            pointerEvents: 'auto',
+          }}
         />
       
         {/* Visual feedback overlay */}
