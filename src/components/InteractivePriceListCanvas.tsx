@@ -61,11 +61,13 @@ export function InteractivePriceListCanvas({
     // Add title element
     if (config.title.trim()) {
       const titleWidth = layout.leftColumnWidth + layout.middleColumnWidth + layout.rightColumnWidth
+      const titleOffsetX = layout.titleOffsetX || 0
+      const titleOffsetY = layout.titleOffsetY || 0
       newElements.push({
         id: "title",
         type: "title",
-        x: layout.startX,
-        y: layout.startY,
+        x: layout.startX + titleOffsetX,
+        y: layout.startY + titleOffsetY,
         width: titleWidth,
         height: layout.titleFontSize * 1.3,
         fontSize: layout.titleFontSize,
@@ -77,11 +79,13 @@ export function InteractivePriceListCanvas({
     
     config.sections.forEach((section) => {
       if (section.subtitle.trim()) {
+        const subtitleOffsetX = section.offsetX || 0
+        const subtitleOffsetY = section.offsetY || 0
         newElements.push({
           id: `subtitle-${section.id}`,
           type: "subtitle",
-          x: layout.startX,
-          y: y,
+          x: layout.startX + subtitleOffsetX,
+          y: y + subtitleOffsetY,
           width: layout.leftColumnWidth + layout.middleColumnWidth,
           height: layout.subtitleFontSize * 1.2,
           fontSize: layout.subtitleFontSize,
@@ -95,12 +99,15 @@ export function InteractivePriceListCanvas({
         const priceHeight = item.prices.length * layout.lineHeight
         const blockHeight = Math.max(serviceHeight, priceHeight)
         
+        const serviceOffsetX = item.offsetX || 0
+        const serviceOffsetY = item.offsetY || 0
+        
         // Add service element
         newElements.push({
           id: `service-${section.id}-${item.id}`,
           type: "service",
-          x: layout.startX,
-          y: y,
+          x: layout.startX + serviceOffsetX,
+          y: y + serviceOffsetY,
           width: layout.leftColumnWidth,
           height: serviceHeight,
           fontSize: layout.serviceFontSize,
@@ -110,11 +117,13 @@ export function InteractivePriceListCanvas({
         
         // Add price elements (each price row is separate)
         item.prices.forEach((price, priceIndex) => {
+          const priceOffsetX = price.offsetX || 0
+          const priceOffsetY = price.offsetY || 0
           newElements.push({
             id: `price-${section.id}-${item.id}-${price.id}`,
             type: "price",
-            x: layout.startX + layout.leftColumnWidth + layout.middleColumnWidth,
-            y: y + priceIndex * layout.lineHeight,
+            x: layout.startX + layout.leftColumnWidth + layout.middleColumnWidth + priceOffsetX,
+            y: y + priceIndex * layout.lineHeight + priceOffsetY,
             width: layout.rightColumnWidth,
             height: layout.lineHeight,
             fontSize: layout.priceFontSize,
@@ -257,18 +266,97 @@ export function InteractivePriceListCanvas({
   const updateElementPosition = (element: DraggableElement, newX: number, newY: number) => {
     if (!config || !onConfigChange) return
     
-    const newLayout = { ...config.layout }
+    const deltaX = Math.round(newX - element.x)
+    const deltaY = Math.round(newY - element.y)
+    
+    // Update the elements array for smooth visual feedback
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id === element.id) {
+          return { ...el, x: newX, y: newY }
+        }
+        return el
+      })
+    )
     
     switch (element.type) {
-      case "title":
-        newLayout.startX = Math.max(0, Math.round(newX))
-        newLayout.startY = Math.max(0, Math.round(newY))
+      case "title": {
+        const newLayout = { ...config.layout }
+        newLayout.titleOffsetX = (config.layout.titleOffsetX || 0) + deltaX
+        newLayout.titleOffsetY = (config.layout.titleOffsetY || 0) + deltaY
+        onConfigChange({ ...config, layout: newLayout })
         break
-      // For now, we'll keep it simple and just move startX/startY for title
-      // More complex positioning would require restructuring the layout system
+      }
+      case "subtitle": {
+        if (!element.sectionId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              offsetX: (section.offsetX || 0) + deltaX,
+              offsetY: (section.offsetY || 0) + deltaY,
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
+      case "service": {
+        if (!element.sectionId || !element.itemId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              items: section.items.map((item) => {
+                if (item.id === element.itemId) {
+                  return {
+                    ...item,
+                    offsetX: (item.offsetX || 0) + deltaX,
+                    offsetY: (item.offsetY || 0) + deltaY,
+                  }
+                }
+                return item
+              }),
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
+      case "price": {
+        if (!element.sectionId || !element.itemId || !element.priceId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              items: section.items.map((item) => {
+                if (item.id === element.itemId) {
+                  return {
+                    ...item,
+                    prices: item.prices.map((price) => {
+                      if (price.id === element.priceId) {
+                        return {
+                          ...price,
+                          offsetX: (price.offsetX || 0) + deltaX,
+                          offsetY: (price.offsetY || 0) + deltaY,
+                        }
+                      }
+                      return price
+                    }),
+                  }
+                }
+                return item
+              }),
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
     }
-    
-    onConfigChange({ ...config, layout: newLayout })
   }
 
   const handleFontSizeChange = (value: number[]) => {
