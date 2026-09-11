@@ -46,7 +46,6 @@ export function InteractivePriceListCanvas({
   const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
   const [longPressTimer, setLongPressTimer] = useState<number | null>(null)
   const [fontSize, setFontSize] = useState(22)
-  const [showFontSlider, setShowFontSlider] = useState(false)
   const [zoom, setZoom] = useState(1)
   const [isPinching, setIsPinching] = useState(false)
   const [lastPinchDistance, setLastPinchDistance] = useState(0)
@@ -238,9 +237,9 @@ export function InteractivePriceListCanvas({
         const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
         const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
         
-        // Show debug position
-        setDebugTapPosition({ x: canvasX, y: canvasY })
-        setTimeout(() => setDebugTapPosition(null), 2000)
+        // Show debug position in screen coordinates  
+        setDebugTapPosition({ x: touch.clientX, y: touch.clientY })
+        setTimeout(() => setDebugTapPosition(null), 3000)
         
         // Find element at this position
         const element = findElementAtPosition(canvasX, canvasY)
@@ -248,7 +247,6 @@ export function InteractivePriceListCanvas({
         if (element) {
           setSelectedElement(element.id)
           setFontSize(element.fontSize)
-          setShowFontSlider(false)
           setIsDragging(false)
           
           // Haptic feedback
@@ -258,7 +256,6 @@ export function InteractivePriceListCanvas({
         } else {
           // If no element found, deselect
           setSelectedElement(null)
-          setShowFontSlider(false)
         }
       }
       setLastTap(0)
@@ -286,29 +283,6 @@ export function InteractivePriceListCanvas({
     
     // Otherwise, prepare for panning
     setPanStart(screenPos)
-    
-    // Start long press timer for font size slider
-    const canvas = ref.current
-    if (canvas) {
-      const rect = canvas.getBoundingClientRect()
-      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
-      const element = findElementAtPosition(canvasX, canvasY)
-      
-      if (element) {
-        const timer = window.setTimeout(() => {
-          setFontSize(element.fontSize)
-          setShowFontSlider(true)
-          
-          // Haptic feedback
-          if (navigator.vibrate) {
-            navigator.vibrate(50)
-          }
-        }, 800) // 800ms long press for font slider
-        
-        setLongPressTimer(timer)
-      }
-    }
   }
 
   const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
@@ -645,18 +619,18 @@ export function InteractivePriceListCanvas({
         </button>
       </div>
 
-      {/* Debug tap position indicator */}
-      {debugTapPosition && (
+      {/* Debug tap position indicator - outside transform */}
+      {debugTapPosition && ref.current && (
         <div 
-          className="absolute z-50 size-8 rounded-full bg-red-500/70 border-4 border-white shadow-lg pointer-events-none"
+          className="fixed z-50 size-12 rounded-full bg-red-500/70 border-4 border-white shadow-lg pointer-events-none animate-ping"
           style={{
             left: `${debugTapPosition.x}px`,
             top: `${debugTapPosition.y}px`,
             transform: 'translate(-50%, -50%)',
           }}
         >
-          <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600 text-white px-2 py-1 rounded text-xs">
-            Тапнато тук
+          <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow-xl">
+            ТАПНАТО ТУК ({Math.round(debugTapPosition.x)}, {Math.round(debugTapPosition.y)})
           </div>
         </div>
       )}
@@ -682,35 +656,7 @@ export function InteractivePriceListCanvas({
         </div>
       )}
       
-      {/* Debug: Show all element boundaries */}
-      {elements.length > 0 && (
-        <div className="absolute inset-0 pointer-events-none z-30">
-          {elements.map((el) => {
-            const canvas = ref.current
-            if (!canvas) return null
-            
-            const rect = canvas.getBoundingClientRect()
-            const scale = rect.width / canvas.width
-            
-            return (
-              <div
-                key={`debug-${el.id}`}
-                className="absolute border border-yellow-400/30 bg-yellow-400/5"
-                style={{
-                  left: `${el.x * scale}px`,
-                  top: `${el.y * scale}px`,
-                  width: `${el.width * scale}px`,
-                  height: `${el.height * scale}px`,
-                }}
-              >
-                <div className="text-[8px] text-yellow-600 font-mono bg-yellow-100/80 px-1">
-                  {el.type}
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
+      {/* Debug: Show all element boundaries - moved inside transform */}
 
       <div 
         style={{ 
@@ -784,8 +730,8 @@ export function InteractivePriceListCanvas({
         )}
       </div>
       
-      {/* Font size slider */}
-      {showFontSlider && selectedElement && (
+      {/* Font size slider - always show when element is selected */}
+      {selectedElement && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t-2 border-primary/20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom">
           <div className="mx-auto max-w-md space-y-4">
             <div className="flex items-center justify-between">
@@ -807,12 +753,11 @@ export function InteractivePriceListCanvas({
                   type="button"
                   className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
                   onClick={() => {
-                    setShowFontSlider(false)
                     setSelectedElement(null)
                     setIsDragging(false)
                   }}
                 >
-                  ✓ Готово
+                  ✓ OK
                 </button>
               </div>
             </div>
