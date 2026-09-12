@@ -1,0 +1,744 @@
+import { useEffect, useRef, useState, type RefObject } from "react"
+import { renderPriceList } from "@/lib/renderPriceList"
+import type { PriceListConfig } from "@/lib/types"
+import { cn } from "@/lib/utils"
+import { Slider } from "@/components/ui/slider"
+import { Label } from "@/components/ui/label"
+
+type DraggableElement = {
+  id: string
+  type: "title" | "subtitle" | "service" | "price"
+  x: number
+  y: number
+  width: number
+  height: number
+  fontSize: number
+  sectionId?: string
+  itemId?: string
+  priceId?: string
+}
+
+type InteractivePriceListCanvasProps = {
+  config: PriceListConfig | null
+  background: HTMLImageElement | null
+  fontFamily: string
+  className?: string
+  canvasRef?: RefObject<HTMLCanvasElement | null>
+  onConfigChange?: (config: PriceListConfig) => void
+}
+
+export function InteractivePriceListCanvas({
+  config,
+  background,
+  fontFamily,
+  className,
+  canvasRef,
+  onConfigChange,
+}: InteractivePriceListCanvasProps) {
+  const localRef = useRef<HTMLCanvasElement>(null)
+  const ref = canvasRef ?? localRef
+  const containerRef = useRef<HTMLDivElement>(null)
+  
+  const [elements, setElements] = useState<DraggableElement[]>([])
+  const [selectedElement, setSelectedElement] = useState<string | null>(null)
+  const [joystickActive, setJoystickActive] = useState(false)
+  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 })
+  const joystickIntervalRef = useRef<number | null>(null)
+  const [fontSize, setFontSize] = useState(22)
+  const [zoom, setZoom] = useState(1)
+  const [isPinching, setIsPinching] = useState(false)
+  const [lastPinchDistance, setLastPinchDistance] = useState(0)
+  const [isPanning, setIsPanning] = useState(false)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 })
+  const [lastTap, setLastTap] = useState(0)
+  const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
+  const [debugTapPosition, setDebugTapPosition] = useState<{ x: number; y: number } | null>(null)
+
+  // Prevent body scroll when panning or element selected
+  useEffect(() => {
+    if (isPanning || selectedElement) {
+      document.body.style.overflow = 'hidden'
+      document.body.style.position = 'fixed'
+      document.body.style.width = '100%'
+    } else {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+    
+    return () => {
+      document.body.style.overflow = ''
+      document.body.style.position = ''
+      document.body.style.width = ''
+    }
+  }, [isPanning, selectedElement])
+
+  // Joystick movement effect
+  useEffect(() => {
+    if (!joystickActive || !selectedElement || (joystickOffset.x === 0 && joystickOffset.y === 0)) {
+      if (joystickIntervalRef.current) {
+        clearInterval(joystickIntervalRef.current)
+        joystickIntervalRef.current = null
+      }
+      return
+    }
+
+    const moveSpeed = 2 // pixels per frame
+    joystickIntervalRef.current = window.setInterval(() => {
+      const element = elements.find((el) => el.id === selectedElement)
+      if (element && config && onConfigChange) {
+        const newX = element.x + joystickOffset.x * moveSpeed
+        const newY = element.y + joystickOffset.y * moveSpeed
+        updateElementPosition(element, newX, newY)
+      }
+    }, 16) // ~60fps
+
+    return () => {
+      if (joystickIntervalRef.current) {
+        clearInterval(joystickIntervalRef.current)
+        joystickIntervalRef.current = null
+      }
+    }
+  }, [joystickActive, joystickOffset, selectedElement, elements, config, onConfigChange])
+
+  useEffect(() => {
+    const canvas = ref.current
+    if (!canvas || !config || !background) return
+    renderPriceList(canvas, config, background, fontFamily)
+    
+    // Calculate positions of text elements
+    const newElements: DraggableElement[] = []
+    const layout = config.layout
+    
+    // Add title element
+    if (config.title.trim()) {
+      const titleWidth = layout.leftColumnWidth + layout.middleColumnWidth + layout.rightColumnWidth
+      const titleOffsetX = layout.titleOffsetX || 0
+      const titleOffsetY = layout.titleOffsetY || 0
+      newElements.push({
+        id: "title",
+        type: "title",
+        x: layout.startX + titleOffsetX,
+        y: layout.startY + titleOffsetY,
+        width: titleWidth,
+        height: layout.titleFontSize * 1.3,
+        fontSize: layout.titleFontSize,
+      })
+    }
+    
+    // Add section subtitles and items
+    let y = layout.startY + (config.title.trim() ? layout.titleFontSize * 1.3 + layout.titleGap : 0)
+    
+    config.sections.forEach((section) => {
+      if (section.subtitle.trim()) {
+        const subtitleOffsetX = section.offsetX || 0
+        const subtitleOffsetY = section.offsetY || 0
+        newElements.push({
+          id: `subtitle-${section.id}`,
+          type: "subtitle",
+          x: layout.startX + subtitleOffsetX,
+          y: y + subtitleOffsetY,
+          width: layout.leftColumnWidth + layout.middleColumnWidth,
+          height: layout.subtitleFontSize * 1.2,
+          fontSize: layout.subtitleFontSize,
+          sectionId: section.id,
+        })
+        y += layout.subtitleFontSize * 1.2 + layout.itemGap
+      }
+      
+      section.items.forEach((item) => {
+        const serviceHeight = Math.max(1, Math.ceil(item.service.length / 30)) * layout.lineHeight
+        const priceHeight = item.prices.length * layout.lineHeight
+        const blockHeight = Math.max(serviceHeight, priceHeight)
+        
+        const serviceOffsetX = item.offsetX || 0
+        const serviceOffsetY = item.offsetY || 0
+        
+        // Add service element
+        newElements.push({
+          id: `service-${section.id}-${item.id}`,
+          type: "service",
+          x: layout.startX + serviceOffsetX,
+          y: y + serviceOffsetY,
+          width: layout.leftColumnWidth,
+          height: serviceHeight,
+          fontSize: layout.serviceFontSize,
+          sectionId: section.id,
+          itemId: item.id,
+        })
+        
+        // Add price elements (each price row is separate)
+        item.prices.forEach((price, priceIndex) => {
+          const priceOffsetX = price.offsetX || 0
+          const priceOffsetY = price.offsetY || 0
+          newElements.push({
+            id: `price-${section.id}-${item.id}-${price.id}`,
+            type: "price",
+            x: layout.startX + layout.leftColumnWidth + layout.middleColumnWidth + priceOffsetX,
+            y: y + priceIndex * layout.lineHeight + priceOffsetY,
+            width: layout.rightColumnWidth,
+            height: layout.lineHeight,
+            fontSize: layout.priceFontSize,
+            sectionId: section.id,
+            itemId: item.id,
+            priceId: price.id,
+          })
+        })
+        
+        y += blockHeight + layout.itemGap
+      })
+    })
+    
+    setElements(newElements)
+  }, [background, config, fontFamily, ref])
+
+
+  const getTouchPosition = (touch: React.Touch) => {
+    const canvas = ref.current
+    const container = containerRef.current
+    if (!canvas || !container) return { x: 0, y: 0 }
+    
+    const rect = canvas.getBoundingClientRect()
+    return {
+      x: (touch.clientX - rect.left),
+      y: (touch.clientY - rect.top),
+    }
+  }
+
+  const findElementAtPosition = (x: number, y: number): DraggableElement | null => {
+    // Check in reverse order so top elements are selected first
+    for (let i = elements.length - 1; i >= 0; i--) {
+      const el = elements[i]
+      
+      // Add some tolerance for touch targets (easier to tap)
+      const padding = 5
+      if (x >= el.x - padding && x <= el.x + el.width + padding && 
+          y >= el.y - padding && y <= el.y + el.height + padding) {
+        return el
+      }
+    }
+    return null
+  }
+
+  const getPinchDistance = (touch1: React.Touch, touch2: React.Touch) => {
+    const dx = touch1.clientX - touch2.clientX
+    const dy = touch1.clientY - touch2.clientY
+    return Math.sqrt(dx * dx + dy * dy)
+  }
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Handle pinch-to-zoom
+    if (e.touches.length === 2) {
+      e.preventDefault()
+      setIsPinching(true)
+      const distance = getPinchDistance(e.touches[0], e.touches[1])
+      setLastPinchDistance(distance)
+      setIsPanning(false)
+      return
+    }
+    
+    if (e.touches.length !== 1) return
+    
+    const touch = e.touches[0]
+    const screenPos = getTouchPosition(touch)
+    
+    // Check for double tap
+    const now = Date.now()
+    const timeSinceLastTap = now - lastTap
+    
+    if (timeSinceLastTap < 300 && timeSinceLastTap > 0) {
+      // Double tap detected
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Get the canvas element's actual displayed position
+      const canvas = ref.current
+      if (canvas) {
+        const rect = canvas.getBoundingClientRect()
+        
+        // Inverse transform to get canvas coordinates
+        // Transform is: translate(panOffset) scale(zoom)
+        // So: displayedPos = (canvasPos * displayScale + panOffset) * zoom
+        // Inverse: canvasPos = ((screenPos / zoom) - panOffset) / displayScale
+        
+        const screenX = touch.clientX - rect.left
+        const screenY = touch.clientY - rect.top
+        
+        // Step 1: Inverse zoom
+        const unzoomedX = screenX / zoom
+        const unzoomedY = screenY / zoom
+        
+        // Step 2: Inverse pan
+        const unpannedX = unzoomedX - panOffset.x / zoom
+        const unpannedY = unzoomedY - panOffset.y / zoom
+        
+        // Step 3: Convert from displayed size to canvas size
+        const displayScale = rect.width / canvas.width
+        const canvasX = unpannedX / displayScale
+        const canvasY = unpannedY / displayScale
+        
+        // Show debug position in screen coordinates  
+        setDebugTapPosition({ x: touch.clientX, y: touch.clientY })
+        setTimeout(() => setDebugTapPosition(null), 3000)
+        
+        // Find element at this position
+        const element = findElementAtPosition(canvasX, canvasY)
+        
+        console.log('Double tap:', {
+          screen: { x: touch.clientX, y: touch.clientY },
+          unzoomed: { x: unzoomedX, y: unzoomedY },
+          unpanned: { x: unpannedX, y: unpannedY },
+          canvas: { x: canvasX, y: canvasY },
+          zoom,
+          panOffset,
+          element: element ? element.type : 'none'
+        })
+        
+        if (element) {
+          setSelectedElement(element.id)
+          setFontSize(element.fontSize)
+          
+          // Haptic feedback
+          if (navigator.vibrate) {
+            navigator.vibrate([30, 50, 30])
+          }
+        } else {
+          // If no element found, deselect
+          setSelectedElement(null)
+        }
+      }
+      setLastTap(0)
+      return
+    }
+    
+    setLastTap(now)
+    
+    // Prepare for panning (no more dragging)
+    setPanStart(screenPos)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    // Handle pinch-to-zoom
+    if (e.touches.length === 2 && isPinching) {
+      e.preventDefault()
+      const distance = getPinchDistance(e.touches[0], e.touches[1])
+      const delta = distance - lastPinchDistance
+      const zoomDelta = delta * 0.01
+      
+      setZoom((prev) => Math.max(0.5, Math.min(3, prev + zoomDelta)))
+      setLastPinchDistance(distance)
+      return
+    }
+    
+    if (e.touches.length !== 1) return
+    
+    const touch = e.touches[0]
+    const screenPos = getTouchPosition(touch)
+    
+    // Handle panning (no more element dragging)
+    if (panStart && !selectedElement) {
+      e.preventDefault()
+      setIsPanning(true)
+      
+      const dx = screenPos.x - panStart.x
+      const dy = screenPos.y - panStart.y
+      
+      setPanOffset((prev) => ({
+        x: prev.x + dx,
+        y: prev.y + dy,
+      }))
+      
+      setPanStart(screenPos)
+    }
+  }
+
+  const handleTouchEnd = () => {
+    if (isPinching) {
+      setIsPinching(false)
+      setLastPinchDistance(0)
+    }
+    
+    if (isPanning) {
+      setIsPanning(false)
+    }
+    
+    setPanStart(null)
+  }
+
+  const updateElementPosition = (element: DraggableElement, newX: number, newY: number) => {
+    if (!config || !onConfigChange) return
+    
+    const deltaX = Math.round(newX - element.x)
+    const deltaY = Math.round(newY - element.y)
+    
+    // Update the elements array for smooth visual feedback
+    setElements((prev) =>
+      prev.map((el) => {
+        if (el.id === element.id) {
+          return { ...el, x: newX, y: newY }
+        }
+        return el
+      })
+    )
+    
+    switch (element.type) {
+      case "title": {
+        const newLayout = { ...config.layout }
+        newLayout.titleOffsetX = (config.layout.titleOffsetX || 0) + deltaX
+        newLayout.titleOffsetY = (config.layout.titleOffsetY || 0) + deltaY
+        onConfigChange({ ...config, layout: newLayout })
+        break
+      }
+      case "subtitle": {
+        if (!element.sectionId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              offsetX: (section.offsetX || 0) + deltaX,
+              offsetY: (section.offsetY || 0) + deltaY,
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
+      case "service": {
+        if (!element.sectionId || !element.itemId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              items: section.items.map((item) => {
+                if (item.id === element.itemId) {
+                  return {
+                    ...item,
+                    offsetX: (item.offsetX || 0) + deltaX,
+                    offsetY: (item.offsetY || 0) + deltaY,
+                  }
+                }
+                return item
+              }),
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
+      case "price": {
+        if (!element.sectionId || !element.itemId || !element.priceId) return
+        const newSections = config.sections.map((section) => {
+          if (section.id === element.sectionId) {
+            return {
+              ...section,
+              items: section.items.map((item) => {
+                if (item.id === element.itemId) {
+                  return {
+                    ...item,
+                    prices: item.prices.map((price) => {
+                      if (price.id === element.priceId) {
+                        return {
+                          ...price,
+                          offsetX: (price.offsetX || 0) + deltaX,
+                          offsetY: (price.offsetY || 0) + deltaY,
+                        }
+                      }
+                      return price
+                    }),
+                  }
+                }
+                return item
+              }),
+            }
+          }
+          return section
+        })
+        onConfigChange({ ...config, sections: newSections })
+        break
+      }
+    }
+  }
+
+  const handleFontSizeChange = (value: number[]) => {
+    const newSize = value[0]
+    setFontSize(newSize)
+    
+    if (selectedElement && config && onConfigChange) {
+      const element = elements.find((el) => el.id === selectedElement)
+      if (!element) return
+      
+      const newLayout = { ...config.layout }
+      
+      switch (element.type) {
+        case "title":
+          newLayout.titleFontSize = newSize
+          break
+        case "subtitle":
+          newLayout.subtitleFontSize = newSize
+          break
+        case "service":
+          newLayout.serviceFontSize = newSize
+          break
+        case "price":
+          newLayout.priceFontSize = newSize
+          break
+      }
+      
+      onConfigChange({ ...config, layout: newLayout })
+    }
+  }
+
+
+  return (
+    <div 
+      ref={containerRef} 
+      className="relative overflow-hidden select-none"
+      style={{
+        touchAction: 'none',
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        overscrollBehavior: 'none',
+      }}
+      onTouchMove={(e) => {
+        if (isPanning || selectedElement) {
+          e.preventDefault()
+        }
+      }}
+    >
+      {/* Zoom controls */}
+      <div className="absolute top-4 right-4 z-40 flex flex-col gap-2">
+        <button
+          type="button"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors active:scale-95"
+          onClick={() => setZoom((prev) => Math.min(3, prev + 0.2))}
+        >
+          +
+        </button>
+        <div className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border text-xs font-semibold text-center">
+          {Math.round(zoom * 100)}%
+        </div>
+        <button
+          type="button"
+          className="size-12 flex items-center justify-center rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xl font-bold hover:bg-background transition-colors active:scale-95"
+          onClick={() => setZoom((prev) => Math.max(0.5, prev - 0.2))}
+        >
+          −
+        </button>
+        <button
+          type="button"
+          className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur border-2 shadow-lg text-xs font-semibold hover:bg-background transition-colors active:scale-95"
+          onClick={() => {
+            setZoom(1)
+            setPanOffset({ x: 0, y: 0 })
+          }}
+        >
+          Reset
+        </button>
+      </div>
+
+      {/* Debug tap position indicator - outside transform */}
+      {debugTapPosition && ref.current && (
+        <div 
+          className="fixed z-50 size-12 rounded-full bg-red-500/70 border-4 border-white shadow-lg pointer-events-none animate-ping"
+          style={{
+            left: `${debugTapPosition.x}px`,
+            top: `${debugTapPosition.y}px`,
+            transform: 'translate(-50%, -50%)',
+          }}
+        >
+          <div className="absolute -top-10 left-1/2 -translate-x-1/2 whitespace-nowrap bg-red-600 text-white px-3 py-1.5 rounded text-sm font-bold shadow-xl">
+            ТАПНАТО ТУК ({Math.round(debugTapPosition.x)}, {Math.round(debugTapPosition.y)})
+          </div>
+        </div>
+      )}
+
+      {/* Panning indicator */}
+      {isPanning && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg animate-pulse">
+          🤚 Мърдаш картината
+        </div>
+      )}
+      
+      {/* Selected element indicator */}
+      {selectedElement && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg">
+          Избран елемент - Използвай joystick-а
+        </div>
+      )}
+
+      {/* Instructions overlay when zoomed */}
+      {zoom !== 1 && !selectedElement && !isPanning && (
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-background/90 backdrop-blur border text-xs font-medium shadow-lg">
+          Плъзни с 1 пръст за мърдане • Тапни 2х за избор
+        </div>
+      )}
+      
+      {/* Debug: Show all element boundaries - moved inside transform */}
+
+      <div 
+        style={{ 
+          transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${zoom})`, 
+          transformOrigin: 'center center',
+          transition: isPanning ? 'none' : 'transform 0.1s ease-out',
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+        }}
+      >
+        <canvas
+          ref={ref}
+          className={cn("max-h-full max-w-full h-auto w-auto shadow-2xl touch-none select-none", className)}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
+          style={{
+            userSelect: 'none',
+            WebkitUserSelect: 'none',
+            WebkitTouchCallout: 'none',
+            pointerEvents: 'auto',
+          }}
+        />
+      
+        {/* Visual feedback overlay */}
+        {selectedElement && (
+          <div className="absolute inset-0 pointer-events-none">
+            {elements.map((el) => {
+              if (el.id !== selectedElement) return null
+              
+              const canvas = ref.current
+              if (!canvas) return null
+              
+              // Use natural canvas size, not the zoomed rect size
+              // Because this overlay is INSIDE the transformed container
+              const rect = canvas.getBoundingClientRect()
+              // Calculate scale based on original size (before zoom)
+              const baseScale = (rect.width / zoom) / canvas.width
+              
+              return (
+                <div
+                  key={el.id}
+                  className="absolute border-2 rounded transition-all animate-pulse pointer-events-none border-blue-500 bg-blue-500/10"
+                  style={{
+                    left: `${el.x * baseScale}px`,
+                    top: `${el.y * baseScale}px`,
+                    width: `${el.width * baseScale}px`,
+                    height: `${el.height * baseScale}px`,
+                  }}
+                />
+              )
+            })}
+          </div>
+        )}
+      </div>
+      
+      {/* Joystick control - show when element is selected */}
+      {selectedElement && (
+        <div className="fixed bottom-[200px] left-1/2 -translate-x-1/2 z-50">
+          <div className="relative w-32 h-32">
+            {/* Joystick background */}
+            <div className="absolute inset-0 rounded-full bg-gray-300/50 border-4 border-gray-400/50 shadow-lg" />
+            
+            {/* Direction indicators */}
+            <div className="absolute inset-0">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 text-gray-600 text-xs font-bold">▲</div>
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-gray-600 text-xs font-bold">▼</div>
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-bold">◀</div>
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-bold">▶</div>
+            </div>
+            
+            {/* Joystick handle */}
+            <div 
+              className="absolute top-1/2 left-1/2 w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 border-4 border-white shadow-xl cursor-move touch-none transition-transform active:scale-95"
+              style={{
+                transform: `translate(calc(-50% + ${joystickOffset.x * 20}px), calc(-50% + ${joystickOffset.y * 20}px))`,
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault()
+                setJoystickActive(true)
+              }}
+              onTouchMove={(e) => {
+                if (!joystickActive) return
+                e.preventDefault()
+                
+                const touch = e.touches[0]
+                const rect = e.currentTarget.parentElement!.getBoundingClientRect()
+                const centerX = rect.left + rect.width / 2
+                const centerY = rect.top + rect.height / 2
+                
+                // Calculate offset from center (-1 to 1)
+                const dx = (touch.clientX - centerX) / (rect.width / 2)
+                const dy = (touch.clientY - centerY) / (rect.height / 2)
+                
+                // Clamp to circle
+                const distance = Math.sqrt(dx * dx + dy * dy)
+                if (distance > 1) {
+                  setJoystickOffset({ x: dx / distance, y: dy / distance })
+                } else {
+                  setJoystickOffset({ x: dx, y: dy })
+                }
+              }}
+              onTouchEnd={() => {
+                setJoystickActive(false)
+                setJoystickOffset({ x: 0, y: 0 })
+              }}
+            >
+              <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs">
+                Мърдай
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Font size slider - always show when element is selected */}
+      {selectedElement && (
+        <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t-2 border-primary/20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom">
+          <div className="mx-auto max-w-md space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="size-10 flex items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-xl">Aa</span>
+                </div>
+                <div>
+                  <Label className="text-base font-semibold">Размер на шрифта</Label>
+                  <p className="text-xs text-muted-foreground">Плъзни за промяна</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className="px-4 py-2 bg-primary/10 rounded-lg">
+                  <span className="text-2xl font-bold text-primary">{fontSize}</span>
+                  <span className="text-sm text-muted-foreground ml-0.5">px</span>
+                </div>
+                <button
+                  type="button"
+                  className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
+                  onClick={() => {
+                    setSelectedElement(null)
+                  }}
+                >
+                  ✓ OK
+                </button>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Slider
+                value={[fontSize]}
+                onValueChange={handleFontSizeChange}
+                min={10}
+                max={80}
+                step={1}
+                className="w-full"
+              />
+              <div className="flex justify-between text-xs text-muted-foreground px-1">
+                <span>10 (малък)</span>
+                <span className="text-primary font-medium">{fontSize}</span>
+                <span>80 (голям)</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

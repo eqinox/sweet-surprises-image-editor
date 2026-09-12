@@ -2,18 +2,24 @@ export type PriceRow = {
   id: string
   duration: string
   price: string
+  offsetX?: number
+  offsetY?: number
 }
 
 export type ServiceItem = {
   id: string
   service: string
   prices: PriceRow[]
+  offsetX?: number
+  offsetY?: number
 }
 
 export type Section = {
   id: string
   subtitle: string
   items: ServiceItem[]
+  offsetX?: number
+  offsetY?: number
 }
 
 export type Layout = {
@@ -34,6 +40,8 @@ export type Layout = {
   subtitleColor: string
   serviceColor: string
   priceColor: string
+  titleOffsetX?: number
+  titleOffsetY?: number
 }
 
 export type PriceListConfig = {

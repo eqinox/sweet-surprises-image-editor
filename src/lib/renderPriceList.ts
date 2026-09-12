@@ -106,7 +106,9 @@ export function renderPriceList(
     ctx.fillStyle = layout.titleColor
     ctx.textAlign = "center"
     ctx.textBaseline = "top"
-    ctx.fillText(config.title, titleX, y)
+    const titleOffsetX = layout.titleOffsetX || 0
+    const titleOffsetY = layout.titleOffsetY || 0
+    ctx.fillText(config.title, titleX + titleOffsetX, y + titleOffsetY)
     y += layout.titleFontSize * 1.3
     y += getSectionSubtitle(config.sections[0])
       ? layout.titleGap
@@ -128,7 +130,9 @@ export function renderPriceList(
       const subtitleX =
         middleWidth > 0 ? middleX + middleWidth / 2 : leftX + layout.leftColumnWidth * 0.55
       ctx.textAlign = middleWidth > 0 ? "center" : "left"
-      ctx.fillText(subtitle, subtitleX, y)
+      const subtitleOffsetX = section.offsetX || 0
+      const subtitleOffsetY = section.offsetY || 0
+      ctx.fillText(subtitle, subtitleX + subtitleOffsetX, y + subtitleOffsetY)
       y += layout.subtitleFontSize * 1.2 + layout.itemGap
     }
 
@@ -145,11 +149,14 @@ export function renderPriceList(
       const serviceY =
         priceCount > 1 ? y + (priceBlockHeight - serviceBlockHeight) / 2 : y
 
+      const serviceOffsetX = item.offsetX || 0
+      const serviceOffsetY = item.offsetY || 0
+
       drawMultilineText(
         ctx,
         serviceLines,
-        leftX,
-        serviceY,
+        leftX + serviceOffsetX,
+        serviceY + serviceOffsetY,
         layout.serviceFontSize,
         layout.serviceColor,
         fontFamily,
@@ -163,7 +170,9 @@ export function renderPriceList(
         ctx.fillStyle = layout.priceColor
         ctx.textAlign = "right"
         ctx.textBaseline = "top"
-        ctx.fillText(priceText, rightColumnRight, priceY)
+        const priceOffsetX = priceRow.offsetX || 0
+        const priceOffsetY = priceRow.offsetY || 0
+        ctx.fillText(priceText, rightColumnRight + priceOffsetX, priceY + priceOffsetY)
       })
 
       y += blockHeight + layout.itemGap
