@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, type RefObject } from "react"
-import { GripVerticalIcon } from "lucide-react"
 import { renderPriceList } from "@/lib/renderPriceList"
 import type { PriceListConfig } from "@/lib/types"
 import { cn } from "@/lib/utils"
@@ -42,9 +41,9 @@ export function InteractivePriceListCanvas({
   
   const [elements, setElements] = useState<DraggableElement[]>([])
   const [selectedElement, setSelectedElement] = useState<string | null>(null)
-  const [isDragging, setIsDragging] = useState(false)
-  const [dragStart, setDragStart] = useState<{ x: number; y: number } | null>(null)
-  const [longPressTimer, setLongPressTimer] = useState<number | null>(null)
+  const [joystickActive, setJoystickActive] = useState(false)
+  const [joystickOffset, setJoystickOffset] = useState({ x: 0, y: 0 })
+  const joystickIntervalRef = useRef<number | null>(null)
   const [fontSize, setFontSize] = useState(22)
   const [zoom, setZoom] = useState(1)
   const [isPinching, setIsPinching] = useState(false)
@@ -55,9 +54,9 @@ export function InteractivePriceListCanvas({
   const [panStart, setPanStart] = useState<{ x: number; y: number } | null>(null)
   const [debugTapPosition, setDebugTapPosition] = useState<{ x: number; y: number } | null>(null)
 
-  // Prevent body scroll when dragging or panning
+  // Prevent body scroll when panning or element selected
   useEffect(() => {
-    if (isDragging || isPanning || selectedElement) {
+    if (isPanning || selectedElement) {
       document.body.style.overflow = 'hidden'
       document.body.style.position = 'fixed'
       document.body.style.width = '100%'
@@ -72,7 +71,35 @@ export function InteractivePriceListCanvas({
       document.body.style.position = ''
       document.body.style.width = ''
     }
-  }, [isDragging, isPanning, selectedElement])
+  }, [isPanning, selectedElement])
+
+  // Joystick movement effect
+  useEffect(() => {
+    if (!joystickActive || !selectedElement || (joystickOffset.x === 0 && joystickOffset.y === 0)) {
+      if (joystickIntervalRef.current) {
+        clearInterval(joystickIntervalRef.current)
+        joystickIntervalRef.current = null
+      }
+      return
+    }
+
+    const moveSpeed = 2 // pixels per frame
+    joystickIntervalRef.current = window.setInterval(() => {
+      const element = elements.find((el) => el.id === selectedElement)
+      if (element && config && onConfigChange) {
+        const newX = element.x + joystickOffset.x * moveSpeed
+        const newY = element.y + joystickOffset.y * moveSpeed
+        updateElementPosition(element, newX, newY)
+      }
+    }, 16) // ~60fps
+
+    return () => {
+      if (joystickIntervalRef.current) {
+        clearInterval(joystickIntervalRef.current)
+        joystickIntervalRef.current = null
+      }
+    }
+  }, [joystickActive, joystickOffset, selectedElement, elements, config, onConfigChange])
 
   useEffect(() => {
     const canvas = ref.current
@@ -206,12 +233,6 @@ export function InteractivePriceListCanvas({
       setIsPinching(true)
       const distance = getPinchDistance(e.touches[0], e.touches[1])
       setLastPinchDistance(distance)
-      
-      // Cancel any ongoing drag or long press
-      if (longPressTimer) {
-        window.clearTimeout(longPressTimer)
-        setLongPressTimer(null)
-      }
       setIsPanning(false)
       return
     }
@@ -276,7 +297,6 @@ export function InteractivePriceListCanvas({
         if (element) {
           setSelectedElement(element.id)
           setFontSize(element.fontSize)
-          setIsDragging(false)
           
           // Haptic feedback
           if (navigator.vibrate) {
@@ -293,34 +313,7 @@ export function InteractivePriceListCanvas({
     
     setLastTap(now)
     
-    // If element is already selected, prepare for dragging
-    if (selectedElement) {
-      const canvas = ref.current
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect()
-        
-        // Inverse transform
-        const screenX = touch.clientX - rect.left
-        const screenY = touch.clientY - rect.top
-        const unzoomedX = screenX / zoom
-        const unzoomedY = screenY / zoom
-        const unpannedX = unzoomedX - panOffset.x / zoom
-        const unpannedY = unzoomedY - panOffset.y / zoom
-        const displayScale = rect.width / canvas.width
-        const canvasX = unpannedX / displayScale
-        const canvasY = unpannedY / displayScale
-        
-        const element = findElementAtPosition(canvasX, canvasY)
-        
-        if (element && element.id === selectedElement) {
-          e.preventDefault()
-          setDragStart({ x: canvasX, y: canvasY })
-          return
-        }
-      }
-    }
-    
-    // Otherwise, prepare for panning
+    // Prepare for panning (no more dragging)
     setPanStart(screenPos)
   }
 
@@ -342,78 +335,8 @@ export function InteractivePriceListCanvas({
     const touch = e.touches[0]
     const screenPos = getTouchPosition(touch)
     
-    // Cancel long press if moved
-    if (longPressTimer && panStart) {
-      const dx = Math.abs(screenPos.x - panStart.x)
-      const dy = Math.abs(screenPos.y - panStart.y)
-      
-      if (dx > 10 || dy > 10) {
-        window.clearTimeout(longPressTimer)
-        setLongPressTimer(null)
-      }
-    }
-    
-    // Handle element dragging if element is selected
-    if (isDragging && selectedElement && dragStart) {
-      e.preventDefault()
-      
-      const canvas = ref.current
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect()
-        
-        // Inverse transform
-        const screenX = touch.clientX - rect.left
-        const screenY = touch.clientY - rect.top
-        const unzoomedX = screenX / zoom
-        const unzoomedY = screenY / zoom
-        const unpannedX = unzoomedX - panOffset.x / zoom
-        const unpannedY = unzoomedY - panOffset.y / zoom
-        const displayScale = rect.width / canvas.width
-        const canvasX = unpannedX / displayScale
-        const canvasY = unpannedY / displayScale
-        
-        const element = elements.find((el) => el.id === selectedElement)
-        if (element && config && onConfigChange) {
-          const newX = element.x + (canvasX - dragStart.x)
-          const newY = element.y + (canvasY - dragStart.y)
-          updateElementPosition(element, newX, newY)
-        }
-        
-        setDragStart({ x: canvasX, y: canvasY })
-      }
-      return
-    }
-    
-    // Handle element dragging when starting from selected state
-    if (selectedElement && dragStart && !isDragging) {
-      const canvas = ref.current
-      if (canvas) {
-        const rect = canvas.getBoundingClientRect()
-        
-        // Inverse transform
-        const screenX = touch.clientX - rect.left
-        const screenY = touch.clientY - rect.top
-        const unzoomedX = screenX / zoom
-        const unzoomedY = screenY / zoom
-        const unpannedX = unzoomedX - panOffset.x / zoom
-        const unpannedY = unzoomedY - panOffset.y / zoom
-        const displayScale = rect.width / canvas.width
-        const canvasX = unpannedX / displayScale
-        const canvasY = unpannedY / displayScale
-        
-        const dx = Math.abs(canvasX - dragStart.x)
-        const dy = Math.abs(canvasY - dragStart.y)
-        
-        if (dx > 10 || dy > 10) {
-          e.preventDefault()
-          setIsDragging(true)
-          return
-        }
-      }
-    }
-    
-    // Handle panning
-    if (panStart && !selectedElement && !isDragging) {
+    // Handle panning (no more element dragging)
+    if (panStart && !selectedElement) {
       e.preventDefault()
       setIsPanning(true)
       
@@ -437,16 +360,6 @@ export function InteractivePriceListCanvas({
     
     if (isPanning) {
       setIsPanning(false)
-    }
-    
-    if (longPressTimer) {
-      window.clearTimeout(longPressTimer)
-      setLongPressTimer(null)
-    }
-    
-    if (isDragging) {
-      setIsDragging(false)
-      setDragStart(null)
     }
     
     setPanStart(null)
@@ -577,75 +490,6 @@ export function InteractivePriceListCanvas({
     }
   }
 
-  const handleOverlayTouchStart = (e: React.TouchEvent, elementId: string) => {
-    if (e.touches.length !== 1) return
-    
-    e.stopPropagation()
-    e.preventDefault()
-    
-    const touch = e.touches[0]
-    const canvas = ref.current
-    const element = elements.find((el) => el.id === elementId)
-    
-    if (element && canvas) {
-      const rect = canvas.getBoundingClientRect()
-      
-      // Inverse transform
-      const screenX = touch.clientX - rect.left
-      const screenY = touch.clientY - rect.top
-      const unzoomedX = screenX / zoom
-      const unzoomedY = screenY / zoom
-      const unpannedX = unzoomedX - panOffset.x / zoom
-      const unpannedY = unzoomedY - panOffset.y / zoom
-      const displayScale = rect.width / canvas.width
-      const canvasX = unpannedX / displayScale
-      const canvasY = unpannedY / displayScale
-      
-      setDragStart({ x: canvasX, y: canvasY })
-      setIsDragging(true)
-      
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(30)
-      }
-    }
-  }
-
-  const handleOverlayTouchMove = (e: React.TouchEvent, elementId: string) => {
-    if (e.touches.length !== 1 || !isDragging) return
-    
-    e.stopPropagation()
-    e.preventDefault()
-    
-    const touch = e.touches[0]
-    const canvas = ref.current
-    const element = elements.find((el) => el.id === elementId)
-    
-    if (element && config && onConfigChange && dragStart && canvas) {
-      const rect = canvas.getBoundingClientRect()
-      
-      // Inverse transform
-      const screenX = touch.clientX - rect.left
-      const screenY = touch.clientY - rect.top
-      const unzoomedX = screenX / zoom
-      const unzoomedY = screenY / zoom
-      const unpannedX = unzoomedX - panOffset.x / zoom
-      const unpannedY = unzoomedY - panOffset.y / zoom
-      const displayScale = rect.width / canvas.width
-      const canvasX = unpannedX / displayScale
-      const canvasY = unpannedY / displayScale
-      
-      const newX = element.x + (canvasX - dragStart.x)
-      const newY = element.y + (canvasY - dragStart.y)
-      updateElementPosition(element, newX, newY)
-      setDragStart({ x: canvasX, y: canvasY })
-    }
-  }
-
-  const handleOverlayTouchEnd = () => {
-    setIsDragging(false)
-    setDragStart(null)
-  }
 
   return (
     <div 
@@ -658,7 +502,7 @@ export function InteractivePriceListCanvas({
         overscrollBehavior: 'none',
       }}
       onTouchMove={(e) => {
-        if (isDragging || isPanning || selectedElement) {
+        if (isPanning || selectedElement) {
           e.preventDefault()
         }
       }}
@@ -718,9 +562,9 @@ export function InteractivePriceListCanvas({
       )}
       
       {/* Selected element indicator */}
-      {selectedElement && !isDragging && (
+      {selectedElement && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-full bg-blue-600 text-white text-sm font-medium shadow-lg">
-          Избран елемент (скролът е БЛОКИРАН)
+          Избран елемент - Използвай joystick-а
         </div>
       )}
 
@@ -771,43 +615,82 @@ export function InteractivePriceListCanvas({
               // Calculate scale based on original size (before zoom)
               const baseScale = (rect.width / zoom) / canvas.width
               
-              const elementType = el.type === "title" ? "Заглавие" :
-                                 el.type === "subtitle" ? "Подзаглавие" :
-                                 el.type === "service" ? "Услуга" : "Цена"
-              
               return (
                 <div
                   key={el.id}
-                  className={cn(
-                    "absolute border-2 rounded transition-all animate-pulse pointer-events-none",
-                    isDragging ? "border-green-500 bg-green-500/20 shadow-lg" : "border-blue-500 bg-blue-500/10"
-                  )}
+                  className="absolute border-2 rounded transition-all animate-pulse pointer-events-none border-blue-500 bg-blue-500/10"
                   style={{
                     left: `${el.x * baseScale}px`,
                     top: `${el.y * baseScale}px`,
                     width: `${el.width * baseScale}px`,
                     height: `${el.height * baseScale}px`,
                   }}
-                >
-                  <div 
-                    className={cn(
-                      "absolute -top-9 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 text-white text-xs font-medium rounded-full whitespace-nowrap shadow-lg cursor-grab active:cursor-grabbing pointer-events-auto",
-                      isDragging ? "bg-green-600" : "bg-blue-600"
-                    )}
-                    onTouchStart={(e) => handleOverlayTouchStart(e, el.id)}
-                    onTouchMove={(e) => handleOverlayTouchMove(e, el.id)}
-                    onTouchEnd={handleOverlayTouchEnd}
-                  >
-                    <GripVerticalIcon className="size-3.5 animate-pulse" />
-                    {isDragging ? `Местиш ${elementType}` : `${elementType} - Плъзни`}
-                  </div>
-                </div>
+                />
               )
             })}
           </div>
         )}
       </div>
       
+      {/* Joystick control - show when element is selected */}
+      {selectedElement && (
+        <div className="fixed bottom-[200px] left-1/2 -translate-x-1/2 z-50">
+          <div className="relative w-32 h-32">
+            {/* Joystick background */}
+            <div className="absolute inset-0 rounded-full bg-gray-300/50 border-4 border-gray-400/50 shadow-lg" />
+            
+            {/* Direction indicators */}
+            <div className="absolute inset-0">
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 text-gray-600 text-xs font-bold">▲</div>
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 text-gray-600 text-xs font-bold">▼</div>
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-bold">◀</div>
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 text-gray-600 text-xs font-bold">▶</div>
+            </div>
+            
+            {/* Joystick handle */}
+            <div 
+              className="absolute top-1/2 left-1/2 w-16 h-16 -translate-x-1/2 -translate-y-1/2 rounded-full bg-blue-500 border-4 border-white shadow-xl cursor-move touch-none transition-transform active:scale-95"
+              style={{
+                transform: `translate(calc(-50% + ${joystickOffset.x * 20}px), calc(-50% + ${joystickOffset.y * 20}px))`,
+              }}
+              onTouchStart={(e) => {
+                e.preventDefault()
+                setJoystickActive(true)
+              }}
+              onTouchMove={(e) => {
+                if (!joystickActive) return
+                e.preventDefault()
+                
+                const touch = e.touches[0]
+                const rect = e.currentTarget.parentElement!.getBoundingClientRect()
+                const centerX = rect.left + rect.width / 2
+                const centerY = rect.top + rect.height / 2
+                
+                // Calculate offset from center (-1 to 1)
+                const dx = (touch.clientX - centerX) / (rect.width / 2)
+                const dy = (touch.clientY - centerY) / (rect.height / 2)
+                
+                // Clamp to circle
+                const distance = Math.sqrt(dx * dx + dy * dy)
+                if (distance > 1) {
+                  setJoystickOffset({ x: dx / distance, y: dy / distance })
+                } else {
+                  setJoystickOffset({ x: dx, y: dy })
+                }
+              }}
+              onTouchEnd={() => {
+                setJoystickActive(false)
+                setJoystickOffset({ x: 0, y: 0 })
+              }}
+            >
+              <div className="absolute inset-0 flex items-center justify-center text-white font-bold text-xs">
+                Мърдай
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Font size slider - always show when element is selected */}
       {selectedElement && (
         <div className="fixed bottom-0 left-0 right-0 z-50 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t-2 border-primary/20 p-4 pb-[max(1rem,env(safe-area-inset-bottom))] shadow-2xl animate-in slide-in-from-bottom">
@@ -832,7 +715,6 @@ export function InteractivePriceListCanvas({
                   className="px-4 py-2 text-sm font-medium bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors shadow-sm"
                   onClick={() => {
                     setSelectedElement(null)
-                    setIsDragging(false)
                   }}
                 >
                   ✓ OK
