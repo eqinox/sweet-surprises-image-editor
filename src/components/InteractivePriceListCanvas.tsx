@@ -234,8 +234,27 @@ export function InteractivePriceListCanvas({
       const canvas = ref.current
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
-        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        // Inverse transform to get canvas coordinates
+        // Transform is: translate(panOffset) scale(zoom)
+        // So: displayedPos = (canvasPos * displayScale + panOffset) * zoom
+        // Inverse: canvasPos = ((screenPos / zoom) - panOffset) / displayScale
+        
+        const screenX = touch.clientX - rect.left
+        const screenY = touch.clientY - rect.top
+        
+        // Step 1: Inverse zoom
+        const unzoomedX = screenX / zoom
+        const unzoomedY = screenY / zoom
+        
+        // Step 2: Inverse pan
+        const unpannedX = unzoomedX - panOffset.x / zoom
+        const unpannedY = unzoomedY - panOffset.y / zoom
+        
+        // Step 3: Convert from displayed size to canvas size
+        const displayScale = rect.width / canvas.width
+        const canvasX = unpannedX / displayScale
+        const canvasY = unpannedY / displayScale
         
         // Show debug position in screen coordinates  
         setDebugTapPosition({ x: touch.clientX, y: touch.clientY })
@@ -243,6 +262,16 @@ export function InteractivePriceListCanvas({
         
         // Find element at this position
         const element = findElementAtPosition(canvasX, canvasY)
+        
+        console.log('Double tap:', {
+          screen: { x: touch.clientX, y: touch.clientY },
+          unzoomed: { x: unzoomedX, y: unzoomedY },
+          unpanned: { x: unpannedX, y: unpannedY },
+          canvas: { x: canvasX, y: canvasY },
+          zoom,
+          panOffset,
+          element: element ? element.type : 'none'
+        })
         
         if (element) {
           setSelectedElement(element.id)
@@ -269,8 +298,18 @@ export function InteractivePriceListCanvas({
       const canvas = ref.current
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
-        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        // Inverse transform
+        const screenX = touch.clientX - rect.left
+        const screenY = touch.clientY - rect.top
+        const unzoomedX = screenX / zoom
+        const unzoomedY = screenY / zoom
+        const unpannedX = unzoomedX - panOffset.x / zoom
+        const unpannedY = unzoomedY - panOffset.y / zoom
+        const displayScale = rect.width / canvas.width
+        const canvasX = unpannedX / displayScale
+        const canvasY = unpannedY / displayScale
+        
         const element = findElementAtPosition(canvasX, canvasY)
         
         if (element && element.id === selectedElement) {
@@ -321,8 +360,17 @@ export function InteractivePriceListCanvas({
       const canvas = ref.current
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
-        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        // Inverse transform
+        const screenX = touch.clientX - rect.left
+        const screenY = touch.clientY - rect.top
+        const unzoomedX = screenX / zoom
+        const unzoomedY = screenY / zoom
+        const unpannedX = unzoomedX - panOffset.x / zoom
+        const unpannedY = unzoomedY - panOffset.y / zoom
+        const displayScale = rect.width / canvas.width
+        const canvasX = unpannedX / displayScale
+        const canvasY = unpannedY / displayScale
         
         const element = elements.find((el) => el.id === selectedElement)
         if (element && config && onConfigChange) {
@@ -341,8 +389,17 @@ export function InteractivePriceListCanvas({
       const canvas = ref.current
       if (canvas) {
         const rect = canvas.getBoundingClientRect()
-        const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-        const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+        
+        // Inverse transform
+        const screenX = touch.clientX - rect.left
+        const screenY = touch.clientY - rect.top
+        const unzoomedX = screenX / zoom
+        const unzoomedY = screenY / zoom
+        const unpannedX = unzoomedX - panOffset.x / zoom
+        const unpannedY = unzoomedY - panOffset.y / zoom
+        const displayScale = rect.width / canvas.width
+        const canvasX = unpannedX / displayScale
+        const canvasY = unpannedY / displayScale
         
         const dx = Math.abs(canvasX - dragStart.x)
         const dy = Math.abs(canvasY - dragStart.y)
@@ -532,8 +589,17 @@ export function InteractivePriceListCanvas({
     
     if (element && canvas) {
       const rect = canvas.getBoundingClientRect()
-      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+      
+      // Inverse transform
+      const screenX = touch.clientX - rect.left
+      const screenY = touch.clientY - rect.top
+      const unzoomedX = screenX / zoom
+      const unzoomedY = screenY / zoom
+      const unpannedX = unzoomedX - panOffset.x / zoom
+      const unpannedY = unzoomedY - panOffset.y / zoom
+      const displayScale = rect.width / canvas.width
+      const canvasX = unpannedX / displayScale
+      const canvasY = unpannedY / displayScale
       
       setDragStart({ x: canvasX, y: canvasY })
       setIsDragging(true)
@@ -557,8 +623,17 @@ export function InteractivePriceListCanvas({
     
     if (element && config && onConfigChange && dragStart && canvas) {
       const rect = canvas.getBoundingClientRect()
-      const canvasX = (touch.clientX - rect.left) * (canvas.width / rect.width)
-      const canvasY = (touch.clientY - rect.top) * (canvas.height / rect.height)
+      
+      // Inverse transform
+      const screenX = touch.clientX - rect.left
+      const screenY = touch.clientY - rect.top
+      const unzoomedX = screenX / zoom
+      const unzoomedY = screenY / zoom
+      const unpannedX = unzoomedX - panOffset.x / zoom
+      const unpannedY = unzoomedY - panOffset.y / zoom
+      const displayScale = rect.width / canvas.width
+      const canvasX = unpannedX / displayScale
+      const canvasY = unpannedY / displayScale
       
       const newX = element.x + (canvasX - dragStart.x)
       const newY = element.y + (canvasY - dragStart.y)
