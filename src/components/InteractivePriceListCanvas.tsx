@@ -765,8 +765,11 @@ export function InteractivePriceListCanvas({
               const canvas = ref.current
               if (!canvas) return null
               
+              // Use natural canvas size, not the zoomed rect size
+              // Because this overlay is INSIDE the transformed container
               const rect = canvas.getBoundingClientRect()
-              const scale = rect.width / canvas.width
+              // Calculate scale based on original size (before zoom)
+              const baseScale = (rect.width / zoom) / canvas.width
               
               const elementType = el.type === "title" ? "Заглавие" :
                                  el.type === "subtitle" ? "Подзаглавие" :
@@ -780,10 +783,10 @@ export function InteractivePriceListCanvas({
                     isDragging ? "border-green-500 bg-green-500/20 shadow-lg" : "border-blue-500 bg-blue-500/10"
                   )}
                   style={{
-                    left: `${el.x * scale}px`,
-                    top: `${el.y * scale}px`,
-                    width: `${el.width * scale}px`,
-                    height: `${el.height * scale}px`,
+                    left: `${el.x * baseScale}px`,
+                    top: `${el.y * baseScale}px`,
+                    width: `${el.width * baseScale}px`,
+                    height: `${el.height * baseScale}px`,
                   }}
                 >
                   <div 
