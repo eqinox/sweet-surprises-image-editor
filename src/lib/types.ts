@@ -53,6 +53,66 @@ export type PriceListInfo = {
   name: string
 }
 
+export type EditorMode = "price-list" | "voucher"
+
+export type VoucherLayout = {
+  contentWidth: number
+  titleFontSize: number
+  subtitleFontSize: number
+  serviceFontSize: number
+  priceFontSize: number
+  phoneFontSize: number
+  titleX: number
+  titleY: number
+  subtitleX: number
+  subtitleY: number
+  serviceX: number
+  serviceY: number
+  priceX: number
+  priceY: number
+  phoneX: number
+  phoneY: number
+  dividerX: number
+  dividerY: number
+  dividerHeight: number
+  titleColor: string
+  subtitleColor: string
+  serviceColor: string
+  priceColor: string
+  phoneColor: string
+  dividerColor: string
+}
+
+export type VoucherConfig = {
+  title: string
+  subtitle: string
+  service: string
+  price: string
+  phone: string
+  background: string
+  font: {
+    family: string
+    file: string | null
+    name?: string
+  }
+  layout: VoucherLayout
+}
+
+export type RawVoucher = {
+  title?: string
+  subtitle?: string
+  service?: string
+  price?: string
+  phone?: string
+  background?: string
+  font?: {
+    family?: string
+    file?: string | null
+    name?: string
+  }
+  layout?: Partial<VoucherLayout>
+}
+
 export type RawPriceList = {
   title?: string
   background?: string

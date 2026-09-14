@@ -2,11 +2,12 @@ import { useEffect, useState } from "react"
 import { XIcon } from "lucide-react"
 import { PriceListCanvas } from "@/components/PriceListCanvas"
 import { Button } from "@/components/ui/button"
-import type { PriceListConfig } from "@/lib/types"
+import type { EditorMode, PriceListConfig, VoucherConfig } from "@/lib/types"
 
 type FullscreenStageProps = {
   open: boolean
-  config: PriceListConfig | null
+  mode: EditorMode
+  config: PriceListConfig | VoucherConfig | null
   background: HTMLImageElement | null
   fontFamily: string
   onClose: () => void
@@ -14,6 +15,7 @@ type FullscreenStageProps = {
 
 export function FullscreenStage({
   open,
+  mode,
   config,
   background,
   fontFamily,
@@ -48,6 +50,7 @@ export function FullscreenStage({
       onClick={() => setShowHint((value) => !value)}
     >
       <PriceListCanvas
+        mode={mode}
         config={config}
         background={background}
         fontFamily={fontFamily}

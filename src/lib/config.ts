@@ -1,4 +1,5 @@
 import { formatDuration, formatPrice, newId } from "@/lib/format"
+import { INK_COLOR } from "@/lib/ink"
 import type {
   Layout,
   PriceListConfig,
@@ -22,20 +23,14 @@ export const DEFAULT_LAYOUT: Layout = {
   leftColumnWidth: 380,
   middleColumnWidth: 180,
   rightColumnWidth: 260,
-  titleColor: "#2c1810",
-  subtitleColor: "#5c3d2e",
-  serviceColor: "#3d2817",
-  priceColor: "#3d2817",
+  titleColor: "#763805",
+  subtitleColor: "#763805",
+  serviceColor: "#763805",
+  priceColor: "#763805",
 }
 
 function asNumber(value: unknown, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback
-}
-
-function asColor(value: unknown, fallback: string): string {
-  return typeof value === "string" && /^#[0-9A-Fa-f]{6}$/.test(value)
-    ? value
-    : fallback
 }
 
 export function normalizeConfig(raw: RawPriceList): PriceListConfig {
@@ -79,10 +74,10 @@ export function normalizeConfig(raw: RawPriceList): PriceListConfig {
         layout.rightColumnWidth,
         DEFAULT_LAYOUT.rightColumnWidth
       ),
-      titleColor: asColor(layout.titleColor, DEFAULT_LAYOUT.titleColor),
-      subtitleColor: asColor(layout.subtitleColor, DEFAULT_LAYOUT.subtitleColor),
-      serviceColor: asColor(layout.serviceColor, DEFAULT_LAYOUT.serviceColor),
-      priceColor: asColor(layout.priceColor, DEFAULT_LAYOUT.priceColor),
+      titleColor: INK_COLOR,
+      subtitleColor: INK_COLOR,
+      serviceColor: INK_COLOR,
+      priceColor: INK_COLOR,
     },
     sections: (raw.sections ?? []).map((section) => ({
       id: newId(),
@@ -307,6 +302,23 @@ export function setLayout(
     ...config,
     layout: { ...config.layout, ...patch },
   }
+}
+
+export function setAllFontSizes(
+  config: PriceListConfig,
+  nextTitleSize: number
+): PriceListConfig {
+  const size = Number.isFinite(nextTitleSize) ? nextTitleSize : config.layout.titleFontSize
+  const delta = size - config.layout.titleFontSize
+  if (delta === 0) return config
+
+  return setLayout(config, {
+    titleFontSize: Math.max(10, config.layout.titleFontSize + delta),
+    subtitleFontSize: Math.max(10, config.layout.subtitleFontSize + delta),
+    serviceFontSize: Math.max(10, config.layout.serviceFontSize + delta),
+    priceFontSize: Math.max(10, config.layout.priceFontSize + delta),
+    lineHeight: Math.max(12, config.layout.lineHeight + delta),
+  })
 }
 
 export function setTextColor(

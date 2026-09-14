@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { DownloadIcon, Maximize2Icon, SparklesIcon } from "lucide-react"
+import {
+  DownloadIcon,
+  FolderOpenIcon,
+  GiftIcon,
+  Maximize2Icon,
+  SaveIcon,
+  SparklesIcon,
+} from "lucide-react"
 import { toast } from "sonner"
 import { EditorPanel } from "@/components/EditorPanel"
 import { FullscreenStage } from "@/components/FullscreenStage"
 import { PriceListCanvas } from "@/components/PriceListCanvas"
+import { VoucherEditorPanel } from "@/components/VoucherEditorPanel"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -16,12 +24,35 @@ import {
 import { normalizeConfig } from "@/lib/config"
 import { savePicture, safeFileName } from "@/lib/downloadImage"
 import {
+  PROJECT_APP,
+  PROJECT_VERSION,
+  downloadJson,
+  imageToDataUrl,
+  jsonFileName,
+  loadSavedBackground,
+  readProjectFile,
+  urlToDataUrl,
+} from "@/lib/projectFile"
+import {
   createPlaceholderBackground,
   loadImageFromSrc,
 } from "@/lib/renderPriceList"
-import type { PriceListConfig, PriceListInfo, RawPriceList } from "@/lib/types"
+import type {
+  EditorMode,
+  PriceListConfig,
+  PriceListInfo,
+  RawPriceList,
+  RawVoucher,
+  VoucherConfig,
+} from "@/lib/types"
+import {
+  VOUCHER_BACKGROUND_FILE,
+  createDefaultVoucher,
+  normalizeVoucher,
+} from "@/lib/voucher"
 
 const STORAGE_PREFIX = "ss-price-list:"
+const VOUCHER_STORAGE_KEY = "ss-voucher"
 
 function storageKey(listId: string) {
   return `${STORAGE_PREFIX}${listId}`
@@ -50,12 +81,16 @@ async function loadFontFace(url: string, fontFaceName: string) {
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const projectInputRef = useRef<HTMLInputElement>(null)
   const customBackgroundUrl = useRef<string | null>(null)
   const customFontUrl = useRef<string | null>(null)
+  const customFontName = useRef<string | null>(null)
 
+  const [mode, setMode] = useState<EditorMode>("price-list")
   const [lists, setLists] = useState<PriceListInfo[]>([])
   const [listId, setListId] = useState("")
   const [config, setConfig] = useState<PriceListConfig | null>(null)
+  const [voucherConfig, setVoucherConfig] = useState<VoucherConfig | null>(null)
   const [background, setBackground] = useState<HTMLImageElement | null>(null)
   const [fontFamily, setFontFamily] = useState("Georgia, serif")
   const [backgroundLabel, setBackgroundLabel] = useState("Зареждане на снимка...")
@@ -81,9 +116,13 @@ export function App() {
       URL.revokeObjectURL(customFontUrl.current)
       customFontUrl.current = null
     }
+    customFontName.current = null
   }, [])
 
-  const loadDefaultFont = useCallback(async (nextConfig: PriceListConfig, nextListId: string) => {
+  const loadDefaultFont = useCallback(async (
+    nextConfig: { font: PriceListConfig["font"] },
+    nextListId: string
+  ) => {
     try {
       const globalFont = await fetchJson<{ file?: string; name?: string }>(
         "/fonts/fonts.json"
@@ -116,6 +155,18 @@ export function App() {
     const fallback = nextConfig.font.family || "Georgia, serif"
     setFontFamily(fallback)
     setFontLabel(`Шрифт: ${fallback}`)
+  }, [])
+
+  const loadVoucherBackground = useCallback(async (bgFile = VOUCHER_BACKGROUND_FILE) => {
+    try {
+      const image = await loadImageFromSrc(`/images/${encodeURIComponent(bgFile)}`)
+      setBackground(image)
+      setBackgroundLabel(`Снимка: ${bgFile}`)
+    } catch {
+      const placeholder = await createPlaceholderBackground()
+      setBackground(placeholder)
+      setBackgroundLabel("Липсва шаблон — избери снимка")
+    }
   }, [])
 
   const loadDefaultBackground = useCallback(async (nextListId: string, bgFile: string) => {
@@ -199,6 +250,19 @@ export function App() {
   )
 
   useEffect(() => {
+    const saved = localStorage.getItem(VOUCHER_STORAGE_KEY)
+    if (saved) {
+      try {
+        setVoucherConfig(normalizeVoucher(JSON.parse(saved) as RawVoucher))
+        return
+      } catch {
+        localStorage.removeItem(VOUCHER_STORAGE_KEY)
+      }
+    }
+    setVoucherConfig(createDefaultVoucher())
+  }, [])
+
+  useEffect(() => {
     let cancelled = false
 
     async function boot() {
@@ -231,6 +295,30 @@ export function App() {
     localStorage.setItem(storageKey(listId), JSON.stringify(config))
   }, [config, listId])
 
+  useEffect(() => {
+    if (!voucherConfig) return
+    if (typeof voucherConfig.layout.titleX !== "number") {
+      setVoucherConfig(normalizeVoucher(voucherConfig))
+      return
+    }
+    localStorage.setItem(VOUCHER_STORAGE_KEY, JSON.stringify(voucherConfig))
+  }, [voucherConfig])
+
+  const switchMode = async (next: EditorMode) => {
+    if (next === mode) return
+    clearCustomBackground()
+    setMode(next)
+    if (next === "voucher") {
+      await loadVoucherBackground(voucherConfig?.background || VOUCHER_BACKGROUND_FILE)
+      setStatus("Ваучер — готов")
+      return
+    }
+    if (listId && config) {
+      await loadDefaultBackground(listId, config.background)
+      setStatus(`${config.title || listId} — готов`)
+    }
+  }
+
   const handlePickBackground = async (file: File) => {
     try {
       clearCustomBackground()
@@ -250,6 +338,7 @@ export function App() {
       clearCustomFont()
       const url = URL.createObjectURL(file)
       customFontUrl.current = url
+      customFontName.current = file.name
       const name = fontNameFromFile(file)
       await loadFontFace(url, name)
       setFontFamily(name)
@@ -260,25 +349,134 @@ export function App() {
     }
   }
 
+  const activeConfig = mode === "voucher" ? voucherConfig : config
+
   const handleDownload = async () => {
     const canvas = canvasRef.current
-    if (!canvas || !config) return
+    if (!canvas || !activeConfig) return
     setSaving(true)
     try {
-      const result = await savePicture(
+      await savePicture(
         canvas,
-        safeFileName(config.title || listId || "cenoraazpis")
+        safeFileName(
+          mode === "voucher"
+            ? activeConfig.title || "vaucher"
+            : activeConfig.title || listId || "cenoraazpis"
+        )
       )
-      if (result === "shared") {
-        toast.success("Избери „Запази изображение“ / Снимки")
-      } else {
-        toast.success("Снимката е свалена")
-      }
+      toast.success("Снимката е свалена в Downloads")
     } catch (error) {
       if (error instanceof Error && error.name === "AbortError") return
       toast.error(error instanceof Error ? error.message : "Не може да се свали")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleSaveProject = async () => {
+    if (mode === "voucher") {
+      if (!voucherConfig) return
+      try {
+        const backgroundDataUrl = background ? imageToDataUrl(background) : undefined
+        const fontDataUrl = customFontUrl.current
+          ? await urlToDataUrl(customFontUrl.current)
+          : undefined
+        downloadJson(
+          jsonFileName(voucherConfig.title || "vaucher"),
+          {
+            app: PROJECT_APP,
+            version: PROJECT_VERSION,
+            kind: "voucher",
+            savedAt: new Date().toISOString(),
+            config: voucherConfig,
+            backgroundDataUrl,
+            fontDataUrl,
+            fontFileName: customFontName.current || voucherConfig.font.name,
+          }
+        )
+        toast.success("Ваучерът е запазен на компютъра")
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Не може да се запази")
+      }
+      return
+    }
+
+    if (!config) return
+    try {
+      const backgroundDataUrl = background ? imageToDataUrl(background) : undefined
+      const fontDataUrl = customFontUrl.current
+        ? await urlToDataUrl(customFontUrl.current)
+        : undefined
+      downloadJson(
+        jsonFileName(config.title || listId || "cenorazpis"),
+        {
+          app: PROJECT_APP,
+          version: PROJECT_VERSION,
+          kind: "price-list",
+          savedAt: new Date().toISOString(),
+          config,
+          backgroundDataUrl,
+          fontDataUrl,
+          fontFileName: customFontName.current || config.font.name,
+        }
+      )
+      toast.success("Ценоразписът е запазен на компютъра")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Не може да се запази")
+    }
+  }
+
+  const handleLoadProject = async (file: File) => {
+    try {
+      const project = await readProjectFile(file)
+      clearCustomBackground()
+      clearCustomFont()
+
+      const savedImage = await loadSavedBackground(project.backgroundDataUrl)
+      if (project.fontDataUrl) {
+        const name =
+          project.fontFileName?.replace(/\.[^.]+$/, "") ||
+          project.config.font.name ||
+          "SavedFont"
+        await loadFontFace(project.fontDataUrl, name)
+        setFontFamily(name)
+        setFontLabel(
+          project.fontFileName ? `Шрифт: ${project.fontFileName}` : "Шрифт от запазения файл"
+        )
+      }
+
+      if (project.kind === "voucher") {
+        setMode("voucher")
+        setVoucherConfig(project.config)
+        if (savedImage) {
+          setBackground(savedImage)
+          setBackgroundLabel("Снимка от запазения файл")
+        } else {
+          await loadVoucherBackground(project.config.background || VOUCHER_BACKGROUND_FILE)
+        }
+        if (!project.fontDataUrl) {
+          await loadDefaultFont(project.config, listId)
+        }
+        setStatus("Ваучер — отворен от файла")
+        toast.success("Ваучерът е отворен")
+        return
+      }
+
+      setMode("price-list")
+      setConfig(project.config)
+      if (savedImage) {
+        setBackground(savedImage)
+        setBackgroundLabel("Снимка от запазения файл")
+      } else if (listId) {
+        await loadDefaultBackground(listId, project.config.background)
+      }
+      if (!project.fontDataUrl) {
+        await loadDefaultFont(project.config, listId)
+      }
+      setStatus(`${project.config.title || listId || "Ценоразпис"} — отворен от файла`)
+      toast.success("Ценоразписът е отворен")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Файлът не се отвори")
     }
   }
 
@@ -289,11 +487,15 @@ export function App() {
           <div className="px-4 pb-28 pt-5 lg:h-full lg:overflow-y-auto lg:pb-8">
             <div className="mb-5 flex items-start gap-3">
               <div className="flex size-11 items-center justify-center rounded-2xl bg-primary text-primary-foreground shadow-sm">
-                <SparklesIcon className="size-5" />
+                {mode === "voucher" ? (
+                  <GiftIcon className="size-5" />
+                ) : (
+                  <SparklesIcon className="size-5" />
+                )}
               </div>
               <div>
                 <h1 className="font-heading text-xl font-semibold tracking-tight">
-                  Ценоразпис
+                  {mode === "voucher" ? "Ваучер" : "Ценоразпис"}
                 </h1>
                 <p className="text-sm text-muted-foreground">
                   Sweet Surprises — лесно от телефона
@@ -301,28 +503,120 @@ export function App() {
               </div>
             </div>
 
-            <div className="mb-5 space-y-2">
-              <Label className="text-base">Кой ценоразпис</Label>
-              <Select
-                value={listId}
-                onValueChange={(value) => {
-                  if (value) void loadPriceList(value)
-                }}
+            <div className="mb-5 grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={mode === "price-list" ? "default" : "outline"}
+                className="h-12 text-base"
+                onClick={() => void switchMode("price-list")}
               >
-                <SelectTrigger className="h-12 w-full text-base">
-                  <SelectValue placeholder="Избери ценоразпис" />
-                </SelectTrigger>
-                <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
-                  {lists.map((list) => (
-                    <SelectItem key={list.id} value={list.id} className="py-3 text-base">
-                      {list.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                Ценоразпис
+              </Button>
+              <Button
+                type="button"
+                variant={mode === "voucher" ? "default" : "outline"}
+                className="h-12 text-base"
+                onClick={() => void switchMode("voucher")}
+              >
+                Ваучер
+              </Button>
             </div>
 
-            {config ? (
+            {mode === "price-list" && (
+              <div className="mb-5 space-y-2">
+                <Label className="text-base">Кой ценоразпис</Label>
+                <Select
+                  value={listId}
+                  onValueChange={(value) => {
+                    if (value) void loadPriceList(value)
+                  }}
+                >
+                  <SelectTrigger className="h-12 w-full text-base">
+                    <SelectValue placeholder="Избери ценоразпис" />
+                  </SelectTrigger>
+                  <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
+                    {lists.map((list) => (
+                      <SelectItem key={list.id} value={list.id} className="py-3 text-base">
+                        {list.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <input
+              ref={projectInputRef}
+              type="file"
+              accept="application/json,.json"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0]
+                if (file) void handleLoadProject(file)
+                event.target.value = ""
+              }}
+            />
+            <div className="mb-5 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 text-base"
+                  onClick={() => void handleSaveProject()}
+                  disabled={!activeConfig}
+                >
+                  <SaveIcon />
+                  Запази
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-12 text-base"
+                  onClick={() => projectInputRef.current?.click()}
+                >
+                  <FolderOpenIcon />
+                  Отвори
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {mode === "voucher"
+                  ? "Запазва ваучера като файл на компютъра. После го отваряш пак."
+                  : "Запазва ценоразписа като файл на компютъра. После го отваряш пак."}
+              </p>
+            </div>
+
+            {mode === "voucher" ? (
+              voucherConfig ? (
+                <VoucherEditorPanel
+                  config={voucherConfig}
+                  onChange={setVoucherConfig}
+                  backgroundLabel={backgroundLabel}
+                  fontLabel={fontLabel}
+                  onPickBackground={(file) => void handlePickBackground(file)}
+                  onResetBackground={() => {
+                    clearCustomBackground()
+                    void loadVoucherBackground(VOUCHER_BACKGROUND_FILE)
+                  }}
+                  onPickFont={(file) => void handlePickFont(file)}
+                  onResetFont={() => {
+                    clearCustomFont()
+                    if (voucherConfig) {
+                      void loadDefaultFont(voucherConfig, listId)
+                    }
+                  }}
+                  onReloadOriginal={() => {
+                    localStorage.removeItem(VOUCHER_STORAGE_KEY)
+                    setVoucherConfig(createDefaultVoucher())
+                    clearCustomBackground()
+                    void loadVoucherBackground(VOUCHER_BACKGROUND_FILE)
+                    setStatus("Ваучер — готов")
+                    toast.success("Върнат е оригиналният ваучер")
+                  }}
+                />
+              ) : (
+                <p className="text-muted-foreground">{status}</p>
+              )
+            ) : config ? (
               <EditorPanel
                 config={config}
                 onChange={setConfig}
@@ -362,7 +656,8 @@ export function App() {
             <div className="flex h-full w-full max-w-3xl items-center justify-center rounded-2xl bg-black p-2 sm:p-3">
               <PriceListCanvas
                 canvasRef={canvasRef}
-                config={config}
+                mode={mode}
+                config={activeConfig}
                 background={background}
                 fontFamily={fontFamily}
                 className="mx-auto max-h-full max-w-full object-contain"
@@ -375,7 +670,7 @@ export function App() {
               type="button"
               className="h-12 flex-1 text-base"
               onClick={() => void handleDownload()}
-              disabled={!config || saving}
+              disabled={!activeConfig || saving}
             >
               <DownloadIcon />
               Свали снимката
@@ -385,7 +680,7 @@ export function App() {
               variant="secondary"
               className="h-12 flex-1 text-base"
               onClick={() => setPresentation(true)}
-              disabled={!config}
+              disabled={!activeConfig}
             >
               <Maximize2Icon />
               Цял екран
@@ -400,7 +695,7 @@ export function App() {
             type="button"
             className="h-12 flex-1 text-base"
             onClick={() => void handleDownload()}
-            disabled={!config || saving}
+            disabled={!activeConfig || saving}
           >
             <DownloadIcon />
             Свали снимката
@@ -410,7 +705,7 @@ export function App() {
             variant="secondary"
             className="h-12 flex-1 text-base"
             onClick={() => setPresentation(true)}
-            disabled={!config}
+            disabled={!activeConfig}
           >
             <Maximize2Icon />
             Цял екран
@@ -420,7 +715,8 @@ export function App() {
 
       <FullscreenStage
         open={presentation}
-        config={config}
+        mode={mode}
+        config={activeConfig}
         background={background}
         fontFamily={fontFamily}
         onClose={() => setPresentation(false)}

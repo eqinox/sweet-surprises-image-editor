@@ -1,10 +1,12 @@
 import { useEffect, useRef, type RefObject } from "react"
 import { renderPriceList } from "@/lib/renderPriceList"
-import type { PriceListConfig } from "@/lib/types"
+import { renderVoucher } from "@/lib/renderVoucher"
+import type { EditorMode, PriceListConfig, VoucherConfig } from "@/lib/types"
 import { cn } from "@/lib/utils"
 
 type PriceListCanvasProps = {
-  config: PriceListConfig | null
+  mode: EditorMode
+  config: PriceListConfig | VoucherConfig | null
   background: HTMLImageElement | null
   fontFamily: string
   className?: string
@@ -12,6 +14,7 @@ type PriceListCanvasProps = {
 }
 
 export function PriceListCanvas({
+  mode,
   config,
   background,
   fontFamily,
@@ -24,8 +27,12 @@ export function PriceListCanvas({
   useEffect(() => {
     const canvas = ref.current
     if (!canvas || !config || !background) return
-    renderPriceList(canvas, config, background, fontFamily)
-  }, [background, config, fontFamily, ref])
+    if (mode === "voucher") {
+      renderVoucher(canvas, config as VoucherConfig, background, fontFamily)
+      return
+    }
+    renderPriceList(canvas, config as PriceListConfig, background, fontFamily)
+  }, [background, config, fontFamily, mode, ref])
 
   return (
     <canvas

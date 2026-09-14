@@ -1,54 +1,6 @@
+import { createWrap, drawMultilineText, type WrapContext } from "@/lib/canvasText"
+import { INK_COLOR } from "@/lib/ink"
 import type { PriceListConfig, ServiceItem } from "@/lib/types"
-
-type WrapContext = {
-  wrapText: (text: string, maxWidth: number, fontSize: number, fontFamily: string) => string[]
-}
-
-function createWrap(ctx: CanvasRenderingContext2D): WrapContext {
-  return {
-    wrapText(text, maxWidth, fontSize, fontFamily) {
-      ctx.font = `${fontSize}px ${fontFamily}`
-      const words = text.split(/\s+/)
-      const lines: string[] = []
-      let current = ""
-
-      for (const word of words) {
-        const test = current ? `${current} ${word}` : word
-        if (ctx.measureText(test).width <= maxWidth) {
-          current = test
-        } else {
-          if (current) lines.push(current)
-          current = word
-        }
-      }
-
-      if (current) lines.push(current)
-      return lines.length ? lines : [""]
-    },
-  }
-}
-
-function drawMultilineText(
-  ctx: CanvasRenderingContext2D,
-  lines: string[],
-  x: number,
-  y: number,
-  fontSize: number,
-  color: string,
-  fontFamily: string,
-  align: CanvasTextAlign = "left"
-) {
-  ctx.font = `${fontSize}px ${fontFamily}`
-  ctx.fillStyle = color
-  ctx.textAlign = align
-  ctx.textBaseline = "top"
-
-  lines.forEach((line, i) => {
-    ctx.fillText(line, x, y + i * fontSize * 1.15)
-  })
-
-  return lines.length * fontSize * 1.15
-}
 
 function measureItemBlock(
   wrap: WrapContext,
@@ -102,12 +54,22 @@ export function renderPriceList(
   const titleX = leftX + blockWidth / 2
 
   if (config.title.trim()) {
-    ctx.font = `bold ${layout.titleFontSize}px ${fontFamily}`
-    ctx.fillStyle = layout.titleColor
-    ctx.textAlign = "center"
-    ctx.textBaseline = "top"
-    ctx.fillText(config.title, titleX, y)
-    y += layout.titleFontSize * 1.3
+    const titleLines = wrap.wrapText(
+      config.title.trim(),
+      blockWidth,
+      layout.titleFontSize,
+      fontFamily
+    )
+    y += drawMultilineText(
+      ctx,
+      titleLines,
+      titleX,
+      y,
+      layout.titleFontSize,
+      INK_COLOR,
+      fontFamily,
+      "center"
+    )
     y += getSectionSubtitle(config.sections[0])
       ? layout.titleGap
       : layout.itemGap
@@ -120,16 +82,28 @@ export function renderPriceList(
     if (subtitle) {
       if (s > 0) y += layout.sectionGap
 
-      ctx.font = `bold ${layout.subtitleFontSize}px ${fontFamily}`
-      ctx.fillStyle = layout.subtitleColor
-      ctx.textBaseline = "top"
-
       const middleWidth = layout.middleColumnWidth || 0
+      const subtitleMaxWidth =
+        middleWidth > 0 ? middleWidth : layout.leftColumnWidth
       const subtitleX =
         middleWidth > 0 ? middleX + middleWidth / 2 : leftX + layout.leftColumnWidth * 0.55
-      ctx.textAlign = middleWidth > 0 ? "center" : "left"
-      ctx.fillText(subtitle, subtitleX, y)
-      y += layout.subtitleFontSize * 1.2 + layout.itemGap
+      const subtitleLines = wrap.wrapText(
+        subtitle,
+        subtitleMaxWidth,
+        layout.subtitleFontSize,
+        fontFamily
+      )
+      y += drawMultilineText(
+        ctx,
+        subtitleLines,
+        subtitleX,
+        y,
+        layout.subtitleFontSize,
+        INK_COLOR,
+        fontFamily,
+        middleWidth > 0 ? "center" : "left"
+      )
+      y += layout.itemGap
     }
 
     for (const item of section.items) {
@@ -151,7 +125,7 @@ export function renderPriceList(
         leftX,
         serviceY,
         layout.serviceFontSize,
-        layout.serviceColor,
+        INK_COLOR,
         fontFamily,
         "left"
       )
@@ -160,7 +134,7 @@ export function renderPriceList(
         const priceY = y + i * layout.lineHeight
         const priceText = `${priceRow.duration} — ${priceRow.price}`
         ctx.font = `${layout.priceFontSize}px ${fontFamily}`
-        ctx.fillStyle = layout.priceColor
+        ctx.fillStyle = INK_COLOR
         ctx.textAlign = "right"
         ctx.textBaseline = "top"
         ctx.fillText(priceText, rightColumnRight, priceY)

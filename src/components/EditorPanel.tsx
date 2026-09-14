@@ -7,6 +7,7 @@ import {
   TypeIcon,
 } from "lucide-react"
 import { toast } from "sonner"
+import { FontSizeField } from "@/components/FontSizeField"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -40,6 +41,7 @@ import {
   removePriceRow,
   removeSection,
   removeService,
+  setAllFontSizes,
   setLayout,
   setPriceRow,
   setServiceName,
@@ -232,14 +234,55 @@ export function EditorPanel({
             Добави услуга
           </Button>
 
-          <div className="space-y-2">
-            <Label htmlFor="title-field">Заглавие</Label>
-            <Input
-              id="title-field"
-              className="h-12 text-base"
-              value={config.title}
-              onChange={(event) => onChange(setTitle(config, event.target.value))}
-              placeholder="Например: Фризьорство"
+          <FontSizeField
+            id="pricelist-all-size"
+            label="Големина на целия текст"
+            value={config.layout.titleFontSize}
+            onChange={(value) => onChange(setAllFontSizes(config, value))}
+          />
+
+          <div className="grid grid-cols-[1fr_5.5rem] items-start gap-2">
+            <div className="space-y-2">
+              <Label htmlFor="title-field">Заглавие</Label>
+              <Textarea
+                id="title-field"
+                className="min-h-16 text-base"
+                value={config.title}
+                onChange={(event) => onChange(setTitle(config, event.target.value))}
+                placeholder="Например: Фризьорство"
+              />
+            </div>
+            <FontSizeField
+              id="pricelist-title-size"
+              label="Големина"
+              value={config.layout.titleFontSize}
+              onChange={(value) =>
+                onChange(setLayout(config, { titleFontSize: value }))
+              }
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <FontSizeField
+              id="pricelist-subtitle-size"
+              label="Големина на подзаглавието"
+              value={config.layout.subtitleFontSize}
+              onChange={(value) =>
+                onChange(setLayout(config, { subtitleFontSize: value }))
+              }
+            />
+            <FontSizeField
+              id="pricelist-service-size"
+              label="Големина на услугата"
+              value={config.layout.serviceFontSize}
+              onChange={(value) =>
+                onChange(
+                  setLayout(config, {
+                    serviceFontSize: value,
+                    priceFontSize: value,
+                  })
+                )
+              }
             />
           </div>
         </CardContent>
@@ -271,8 +314,8 @@ export function EditorPanel({
             </div>
             <div className="space-y-2">
               <Label>Подзаглавие</Label>
-              <Input
-                className="h-12 text-base"
+              <Textarea
+                className="min-h-16 text-base"
                 value={section.subtitle}
                 onChange={(event) =>
                   onChange(setSubtitle(config, section.id, event.target.value))
@@ -553,9 +596,9 @@ export function EditorPanel({
           {dialog?.type === "title" && (
             <div className="space-y-2">
               <Label htmlFor="dialog-title">Заглавие</Label>
-              <Input
+              <Textarea
                 id="dialog-title"
-                className="h-12 text-base"
+                className="min-h-16 text-base"
                 value={titleDraft}
                 onChange={(event) => setTitleDraft(event.target.value)}
                 placeholder="Фризьорство"
@@ -567,9 +610,9 @@ export function EditorPanel({
           {dialog?.type === "section" && (
             <div className="space-y-2">
               <Label htmlFor="dialog-section">Подзаглавие</Label>
-              <Input
+              <Textarea
                 id="dialog-section"
-                className="h-12 text-base"
+                className="min-h-16 text-base"
                 value={sectionDraft}
                 onChange={(event) => setSectionDraft(event.target.value)}
                 placeholder="Боядисване"
